@@ -7,6 +7,7 @@ import { authRouter } from './modules/auth/index.js'
 import { docsRouter, fileRouter, shelfRouter } from './modules/docs/index.js'
 import { embedRouter } from './modules/embed/index.js'
 import { healthRouter } from './modules/health/index.js'
+import { trackRouter, trackJsonErrorHandler } from './modules/track/index.js'
 
 export function createApp(): Express {
   const app = express()
@@ -48,6 +49,16 @@ export function createApp(): Express {
   //   GET  /api/embed/config  挂件公开配置（channelId/基址/token 接口，无密钥）
   // 路由与 /api/docs/*、/api/auth/*、/api/ask 全不重叠，挂在最后即可。
   app.use(embedRouter)
+
+  // T07：行为统计落库（方案乙 —— webhook 路线已被 V2 实验否决，v0.8.2 无嵌入渠道回调）
+  //   POST /api/track               前端埋点统一入口（单条/批量，匿名可传）
+  //   GET  /api/admin/stats/summary 管理员看板摘要（静态口令或 isAdmin 用户 JWT）
+  // 路径与前面所有路由不重叠，挂在最后即可；不改任何既有模块的行为。
+  app.use(trackRouter)
+
+  // T07 兜底错误体：只拦 /api/track，其余路径原样 next(err) 交还 Express 默认处理
+  // （保证既有路由的报错行为不变）。必须注册在最后 —— 错误中间件只抓它之前抛出的错误。
+  app.use(trackJsonErrorHandler)
 
   return app
 }

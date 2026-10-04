@@ -9,6 +9,7 @@ import { ApiError } from '../api/http'
 import type { DocDetailResponse, PreviewAvailability } from '../api/types'
 import { MISSING_LABEL } from '../constants'
 import { authToken, currentUser, isLoggedIn } from '../composables/useAuth'
+import { trackDownload, trackPreview } from '../composables/useTracking'
 
 const route = useRoute()
 const router = useRouter()
@@ -70,6 +71,13 @@ async function loadPreview(): Promise<void> {
     const blob = await response.blob()
     previewUrl.value = URL.createObjectURL(blob)
     previewUnavailableReason.value = ''
+    // T07 埋点：预览开流成功（只在真的能看时记，不记"点了但看不了"）
+    void trackPreview({
+      docId: docId.value,
+      fileType: detail.value.doc.fileType,
+      sizeBytes: detail.value.doc.fileSize,
+      title: detail.value.doc.readableTitle,
+    })
   } catch (err) {
     // 预览失败不阻断详情页：给一句原因 + 下载按钮兜底
     previewUnavailableReason.value =
@@ -105,6 +113,13 @@ async function doDownload(): Promise<void> {
     const response = await fetchDocDownload(docId.value, token)
     const blob = await response.blob()
     triggerBrowserDownload(blob, downloadFileName.value)
+    // T07 埋点（双写的第二写）：后端 DownloadLog 已在开流前写好权威记录，
+    // 这条只把「浏览器内发起的下载」并进事件流，供漏斗分析；不改 T04 任何行为。
+    void trackDownload({
+      docId: docId.value,
+      fileName: downloadFileName.value,
+      title: detail.value?.doc.readableTitle ?? '',
+    })
     ElMessage.success('已开始下载')
   } catch (err) {
     if (err instanceof ApiError && err.isUnauthorized) {

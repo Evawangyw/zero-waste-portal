@@ -4,6 +4,9 @@ import type { ShelfSort } from './api/types'
 /** localStorage 里放 JWT 的键名 */
 export const TOKEN_STORAGE_KEY = 'zwp.auth.token'
 
+/** sessionStorage 里放埋点会话标识的键名（T07）：刷新不变、换标签页即新会话 */
+export const TRACK_SESSION_STORAGE_KEY = 'zwp.track.sid'
+
 /** 本项目里的"资料书架"叫法 */
 export const APP_NAME = '零废弃知识库'
 

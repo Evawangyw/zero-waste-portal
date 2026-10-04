@@ -247,3 +247,70 @@ export interface EmbedErrorBody {
     readonly message: string
   }
 }
+
+// ---------------------------------------------------------------- 行为统计（T07）
+
+/** 7 类埋点事件（与后端 track.types.ts 的 TRACK_EVENTS 一一对应） */
+export type TrackEventName =
+  'page_view' | 'search' | 'preview' | 'download' | 'ai_ask' | 'register' | 'feedback_submit'
+
+/** 单条被拒事件的说明（后端逐条校验，前端只在排障时看它） */
+export interface TrackIssue {
+  readonly index: number
+  readonly code: string
+  readonly message: string
+}
+
+/** POST /api/track 成功响应 */
+export interface TrackAcceptedResponse {
+  readonly success: true
+  readonly accepted: number
+  readonly rejected: readonly TrackIssue[]
+}
+
+/** POST /api/track 失败响应 */
+export interface TrackErrorBody {
+  readonly success: false
+  readonly error: {
+    readonly code: string
+    readonly message: string
+    readonly issues: readonly TrackIssue[]
+  }
+}
+
+/**
+ * GET /api/admin/stats/summary 响应（P0 只有 curl/脚本消费；
+ * T08 看板页会直接用它渲染，故类型先落在这里，形状不得偏离后端 track.types.ts）。
+ */
+export interface StatsSummaryResponse {
+  readonly success: true
+  readonly generatedAt: string
+  readonly totals: {
+    readonly events: number
+    readonly pv: number
+    readonly uv: number
+    readonly registeredUsers: number
+  }
+  readonly events: Readonly<Record<TrackEventName, number>>
+  readonly topSearchTerms: readonly { readonly term: string; readonly count: number }[]
+  readonly zeroResultSearchTerms: readonly { readonly term: string; readonly count: number }[]
+  readonly topDownloads: readonly {
+    readonly docId: string
+    readonly fileName: string
+    readonly count: number
+  }[]
+  readonly downloads: {
+    /** T04 DownloadLog 行数（下载排行的权威口径） */
+    readonly logRows: number
+    /** EventLog download 事件数（前端埋点口径；与 logRows 不等 = 有接口被直连） */
+    readonly events: number
+  }
+  readonly asks: {
+    readonly total: number
+    readonly judged: number
+    readonly noAnswer: number
+    readonly unjudged: number
+    /** 无答案率 = noAnswer / judged */
+    readonly noAnswerRate: number
+  }
+}

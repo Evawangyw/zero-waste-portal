@@ -17,7 +17,9 @@
     "test:shelf": "tsx src/modules/docs/docs.shelf.selftest.ts",
     "test:file": "tsx src/modules/docs/docs.file.selftest.ts",
     "test:file:toolarge": "tsx src/modules/docs/docs.file.selftest.tooLarge.ts",
-    "test:embed": "tsx src/modules/embed/embed.selftest.ts"
+    "test:embed": "tsx src/modules/embed/embed.selftest.ts",
+    "test:track": "tsx src/modules/track/track.selftest.ts",
+    "admin:promote": "tsx src/modules/track/track.admin.cli.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

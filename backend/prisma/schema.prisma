@@ -78,6 +78,41 @@ model DownloadLog {
   @@map("download_logs")
 }
 
+/// 行为事件日志（T07 · PRD R04 基础版）
+/// 统一埋点表：7 类事件（page_view/search/preview/download/ai_ask/register/feedback_submit）
+/// 全部走这张表，前端统一 POST /api/track。webhook 路线已被 V2 实验否决（v0.8.2 无嵌入渠道回调），
+/// 故本表只由前端埋点 + 后端接口写入（规划 §3.3 方案乙）。
+/// 字段口径见 docs/task-cards/T07-契约.md §1。
+model EventLog {
+  id        String   @id @default(cuid())
+  /// 事件名：7 类白名单之一（见 track.types.ts TRACK_EVENTS）
+  event     String
+  /// 用户 ID；null = 匿名访客。刻意不建外键：删账号不该带走统计（与 QuestionLog 的 SetNull 不同，
+  /// 这里连外键都不要，避免写入时因用户不存在而整条丢失）
+  userId    String?
+  /// 会话标识（前端 sessionStorage 生成；空串 = 无会话）
+  sessionId String   @default("")
+  /// 载荷 JSON 串（各事件自定义；序列化后 ≤4000 字符由接口侧保证）
+  payload   String   @default("{}")
+  /// 页面来源（路由 fullPath，含 query）
+  path      String   @default("")
+  /// 派生列：search 检索词（归一后），供 Top10 / 零结果词走索引
+  term      String   @default("")
+  /// 派生列：ai_ask 无答案判定；null = 未判定（前端没上报回答证据）。
+  /// 判定规则见 track.answer.ts judgeNoAnswer（任务卡验收④）
+  noAnswer  Boolean?
+  /// 派生列：search 结果是否为零（值来自本服务 /api/docs 的 zeroResult）
+  zeroResult Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([event])
+  @@index([createdAt])
+  @@index([sessionId])
+  @@index([event, term])
+  @@index([event, noAnswer])
+  @@map("event_logs")
+}
+
 /// 公众提交的资料（P2：状态「待审核」，通过后由管理员手动在 WeKnora 后台入库）
 /// 状态取值：pending=待审核，approved=通过，rejected=驳回
 model Submission {

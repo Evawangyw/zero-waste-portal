@@ -10,6 +10,7 @@ import { ApiError } from '../api/http'
 import type { RegisterBody } from '../api/types'
 import { TOPIC_OPTIONS } from '../constants'
 import { setAuth } from '../composables/useAuth'
+import { trackRegister } from '../composables/useTracking'
 
 const route = useRoute()
 const router = useRouter()
@@ -169,7 +170,9 @@ async function onRegister(): Promise<void> {
   clearFieldErrors()
   try {
     // 注册成功后直接引导登录（后端 register 不返 token）
-    await apiRegister(toRegisterBody())
+    const created = await apiRegister(toRegisterBody())
+    // T07 埋点：注册成功事件（不记密码/手机号，只记维度与来源页）
+    void trackRegister(created.user, readLandingPath())
     ElMessage.success('注册成功，请用刚注册的账号登录')
     loginForm.phone = registerForm.phone.trim()
     loginForm.password = ''
@@ -197,6 +200,16 @@ function toRegisterBody(): RegisterBody {
     password: registerForm.password,
     consent: true,
   }
+}
+
+/**
+ * T07 埋点用：注册发生时的落地页路径。
+ * 用户多半是从详情页「下载（需登录）」跳过来的，redirect 能还原这条来源。
+ */
+function readLandingPath(): string {
+  const value = route.query['redirect']
+  const first = Array.isArray(value) ? value[0] : value
+  return typeof first === 'string' && first.startsWith('/') ? first : route.path
 }
 
 function errorFor(field: string): string {

@@ -14,6 +14,7 @@
 //   3. 暴露 openWithQuery（零结果页「试试问 AI」预填）与 setContext（注入页面上下文）。
 import { ref } from 'vue'
 import { fetchEmbedConfig } from '../api/embed'
+import { trackAiAsk } from './useTracking'
 import type { EmbedWidgetPublicConfig } from '../api/types'
 
 /** 挂件状态：供页面显示挂件是否就绪 / 是否失败 */
@@ -84,12 +85,17 @@ async function doMount(): Promise<EmbedWidgetPublicConfig | null> {
 /**
  * 打开挂件并自动发问（官方 openWithQuery）。
  * 脚本还没到货时先把问题记下来，脚本 load 后补发 —— 避免用户点了没反应。
+ *
+ * T07：这是站内发问的**唯一收口**（首页示例问题/自定义问题、书架零结果「试试问 AI」都走这里），
+ * 所以 ai_ask 埋点也挂在这里 —— 一次埋点、覆盖全部入口，不会漏也不会重复。
+ * 已知拿不到 answer/sources（v0.8.2 挂件无回答回调），后端会把这批提问记为「未判定」。
  */
 let pendingQuery: string | null = null
 
 export function askWidget(question: string): void {
   const trimmed = question.trim()
   if (trimmed === '') return
+  void trackAiAsk(trimmed, readPageSource())
   const api = window.WeKnora
   if (api === undefined) {
     pendingQuery = trimmed
@@ -97,6 +103,11 @@ export function askWidget(question: string): void {
     return
   }
   api.openWithQuery(trimmed)
+}
+
+/** 埋点用的页面来源（书架零结果发问与首页发问要能分开看） */
+function readPageSource(): string {
+  return typeof window === 'undefined' ? 'unknown' : window.location.pathname
 }
 
 /** 脚本就绪后补发排队中的问题（App.vue 挂载后调一次即可） */

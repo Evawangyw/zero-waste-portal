@@ -5,6 +5,7 @@
 // 所以下载按钮内部跳登录并带 redirect 回跳，路由守卫保持轻。
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { trackPageView } from '../composables/useTracking'
 import HomeView from '../views/HomeView.vue'
 import ShelfView from '../views/ShelfView.vue'
 import DocDetailView from '../views/DocDetailView.vue'
@@ -37,7 +38,15 @@ export const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-router.afterEach((to) => {
+router.afterEach((to, from) => {
   const title = typeof to.meta['title'] === 'string' ? to.meta['title'] : ''
   document.title = title === '' ? '零废弃知识库' : `${title} · 零废弃知识库`
+
+  // T07 埋点：PV 只按「页面（path）变化」计一次。
+  // from.matched 为空 = 首次进入（vue-router 的 START_LOCATION），这一次必须计；
+  // 只改 query（书架筛选/搜索/分页）不重复计 PV，但 fullPath 仍原样带进 payload 与 path 列，
+  // 这样看板既能算页面访问量，也能还原「在哪一页搜了什么」。
+  if (from.matched.length === 0 || from.path !== to.path) {
+    void trackPageView(to.fullPath, to.path, from.fullPath)
+  }
 })

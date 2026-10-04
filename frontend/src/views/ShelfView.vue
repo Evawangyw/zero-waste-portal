@@ -11,6 +11,7 @@ import { ApiError } from '../api/http'
 import type { ShelfFacet, ShelfItem, ShelfSort } from '../api/types'
 import { MISSING_LABEL, SHELF_PAGE_SIZE, SHELF_SORT_OPTIONS } from '../constants'
 import { askWidget } from '../composables/useWidget'
+import { trackSearch } from '../composables/useTracking'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,6 +44,14 @@ const facets = reactive({
 
 const loading = ref(false)
 const loadError = ref('')
+
+/**
+ * T07 埋点：待上报的检索（关键词/筛选）。
+ * 只有用户**主动提交搜索**时才置位；zeroResult 要等 /api/docs 回来才知道，
+ * 故先记下"这是一次检索"，在 loadList 拿到结果时补齐载荷再上报。
+ * 分页/排序/URL 回填触发的加载不会置位，故不会把翻页算成一次检索。
+ */
+let pendingSearchTrack: { readonly term: string } | null = null
 
 /** 生效筛选（多选维度数量），用于筛选区折叠提示 */
 const activeFilterCount = computed(
@@ -86,6 +95,9 @@ async function loadFacets(): Promise<void> {
 async function loadList(): Promise<void> {
   loading.value = true
   loadError.value = ''
+  // 取走并清空标记：这一批数据无论成功失败都只上报一次
+  const pending = pendingSearchTrack
+  pendingSearchTrack = null
   const query: ShelfQueryInput = {
     type: filters.type,
     org: filters.org,
@@ -102,6 +114,19 @@ async function loadList(): Promise<void> {
     total.value = response.total
     totalPages.value = response.totalPages
     zeroResult.value = response.zeroResult
+    if (pending !== null) {
+      trackSearch({
+        term: pending.term,
+        total: response.total,
+        zeroResult: response.zeroResult,
+        filters: {
+          type: [...filters.type],
+          org: [...filters.org],
+          year: [...filters.year],
+          tag: [...filters.tag],
+        },
+      })
+    }
   } catch (err) {
     items.value = []
     total.value = 0
@@ -122,6 +147,8 @@ function describeError(err: unknown, fallback: string): string {
 
 function onSearch(): void {
   page.value = 1
+  // T07：主动提交检索才算一次 search 事件（零结果由下面 loadList 回来时补进载荷）
+  pendingSearchTrack = { term: keyword.value.trim() }
   void syncUrlAndReload()
 }
 
