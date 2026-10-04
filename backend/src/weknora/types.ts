@@ -103,7 +103,9 @@ export interface AskKnowledgeParams {
   readonly query: string
   readonly knowledgeBaseIds: readonly string[]
   /** 流式总时长上限；0/不传 = 不限（长回答兜底，默认 180s） */
-  readonly timeoutMs?: number
+  readonly timeoutMs?: number | undefined
+  /** 外部取消信号（如 HTTP 客户端断开），与总时长上限任一触发即中止上游 */
+  readonly signal?: AbortSignal | undefined
 }
 
 export interface BatchDownloadResult {

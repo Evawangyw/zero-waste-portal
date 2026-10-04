@@ -3,7 +3,7 @@
 // 实现：只经 weknora 对接层；会话 id 服务端持有，不外泄。
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { WeKnoraClient, WeKnoraError } from '../../weknora/index.js'
+import { WeKnoraClient, WeKnoraError, isTerminalEvent } from '../../weknora/index.js'
 import type { AskEvent } from '../../weknora/index.js'
 import type { AskRequestBody, AskStreamEvent } from './ask.types.js'
 
@@ -29,6 +29,8 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
 
   const client = WeKnoraClient.fromEnv()
   const debug = req.query['debug'] === '1'
+  // 客户端断开 -> 中止上游 WeKnora（signal 真正透传到 fetch，WeKnora 侧随之停止）
+  const clientGone = new AbortController()
   let events: AsyncGenerator<AskEvent, void, void>
   try {
     const session = await client.createSession(`web:${body.query.slice(0, 30)}`)
@@ -36,6 +38,7 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
       sessionId: session.id,
       query: body.query,
       knowledgeBaseIds: body.knowledgeBaseIds ?? [],
+      signal: clientGone.signal,
     })
   } catch (err) {
     const error = WeKnoraError.from(err, '/api/ask')
@@ -43,8 +46,6 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
     return
   }
 
-  // 客户端断开时中止上游（AbortController 由 fetch signal 传给 WeKnora）
-  const clientGone = new AbortController()
   req.on('aborted', () => {
     clientGone.abort()
   })
@@ -59,25 +60,46 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   res.setHeader('X-Accel-Buffering', 'no') // 防 nginx 缓冲（deploy/nginx.conf 后续对齐）
   res.flushHeaders()
 
+  let terminated = false
   try {
     for await (const evt of events) {
       if (clientGone.signal.aborted) break
       if (debug) {
-        writeSse(res, { type: 'raw', content: JSON.stringify(evt.raw), responseType: evt.responseType })
-        if (evt.done) break
+        writeSse(res, {
+          type: 'raw',
+          content: JSON.stringify(evt.raw),
+          responseType: evt.responseType,
+        })
+        if (isTerminalEvent(evt)) break
         continue
       }
-      if (evt.done) {
-        writeSse(res, { type: 'done', content: evt.content })
+      // 终止信号：complete / stop / error（不是 done！见 weknora/sse.ts 的协议实测注释）
+      if (isTerminalEvent(evt)) {
+        writeSse(res, {
+          type: evt.responseType === 'error' ? 'error' : 'done',
+          content: evt.content,
+          responseType: evt.responseType,
+        })
+        terminated = true
         break
       }
-      // 默认只透正文；includeThinking=true 才把 thinking 也给前端
-      if (evt.responseType === 'thinking' && body.includeThinking !== true) continue
-      writeSse(res, {
-        type: evt.responseType === 'thinking' ? 'thinking' : 'answer',
-        content: evt.content,
-        responseType: evt.responseType,
-      })
+      // 正文分片
+      if (evt.responseType === 'answer') {
+        if (evt.content !== '') writeSse(res, { type: 'answer', content: evt.content })
+        continue
+      }
+      // 思考过程：默认不透（前端不需要），includeThinking=true 才给
+      if (evt.responseType === 'thinking') {
+        if (body.includeThinking === true && evt.content !== '') {
+          writeSse(res, { type: 'thinking', content: evt.content })
+        }
+        continue
+      }
+      // 其余类型（agent_query 入队确认 / references 引用 / session_title 等）不透给前端
+    }
+    // 上游没发终止帧就断了（异常收尾）：补一个 done，前端才知道流结束
+    if (!terminated && !res.writableEnded && !clientGone.signal.aborted) {
+      writeSse(res, { type: 'done', content: '' })
     }
   } catch (err) {
     const error = WeKnoraError.from(err, '/api/ask')
@@ -103,7 +125,9 @@ function parseAskBody(raw: unknown): AskRequestBody | null {
   const ids = obj['knowledgeBaseIds']
   return {
     query: query.trim(),
-    knowledgeBaseIds: Array.isArray(ids) ? ids.filter((v): v is string => typeof v === 'string') : undefined,
+    knowledgeBaseIds: Array.isArray(ids)
+      ? ids.filter((v): v is string => typeof v === 'string')
+      : undefined,
     includeThinking: obj['includeThinking'] === true,
   }
 }

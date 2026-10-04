@@ -4,7 +4,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { WeKnoraClient, WeKnoraError } from '../../weknora/index.js'
-import type { DocsQuery, DocsResponse, DocSummary } from './docs.types.js'
+import type { DocsErrorResponse, DocsQuery, DocSummary } from './docs.types.js'
 
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
@@ -38,8 +38,9 @@ async function handleDocs(req: Request, res: Response): Promise<void> {
       tags: k.tags,
       updatedAt: k.updatedAt,
     }))
-    const body: DocsResponse = { success: true, total: result.total, items }
-    res.status(200).json(body)
+    // 成功体 = 裸数组（任务卡："返回测试库中文件的标题 JSON 数组"）；总数放响应头
+    res.setHeader('X-Total-Count', String(result.total))
+    res.status(200).json(items)
   } catch (err) {
     respondError(res, err)
   }
@@ -66,11 +67,11 @@ function parseDocsQuery(raw: unknown): DocsQuery {
 /** 对接层错误 -> HTTP 状态码（前端能区分"未授权"与"引擎挂了"） */
 function respondError(res: Response, err: unknown): void {
   const error = WeKnoraError.from(err, '/api/docs')
-  res.status(statusFor(error.kind)).json({
+  const body: DocsErrorResponse = {
     success: false,
     error: { kind: error.kind, message: error.message },
-    items: [],
-  })
+  }
+  res.status(statusFor(error.kind)).json(body)
 }
 
 /** 我方配置问题（401/403）对前端统一报 502，不泄露内网鉴权细节 */

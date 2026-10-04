@@ -106,12 +106,15 @@ async function sendWithRetry(
     }
   }
   // 理论上不可达（循环内必 return 或 throw），此处兜底保证类型收窄
-  throw lastError ?? new WeKnoraError({
-    kind: 'network',
-    message: `调用 WeKnora 失败（${spec.path}）：重试耗尽`,
-    path: spec.path,
-    retryable: false,
-  })
+  throw (
+    lastError ??
+    new WeKnoraError({
+      kind: 'network',
+      message: `调用 WeKnora 失败（${spec.path}）：重试耗尽`,
+      path: spec.path,
+      retryable: false,
+    })
+  )
 }
 
 /** 单次发送（不含重试）：负责注入超时/取消信号、判状态码、拼错误 */
@@ -178,8 +181,7 @@ function toTransportError(
   idempotent: boolean,
 ): WeKnoraError {
   if (err instanceof WeKnoraError) return err
-  const isAbort =
-    err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')
+  const isAbort = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')
   const kind: WeKnoraErrorKind = isAbort ? 'timeout' : 'network'
   return new WeKnoraError({
     kind,

@@ -56,7 +56,10 @@ export class WeKnoraClient {
   async listKnowledge(params: ListKnowledgeParams = {}): Promise<ListKnowledgeResult> {
     const kbId = params.knowledgeBaseId ?? this.config.knowledgeBaseId
     const page = normalizePositiveInt(params.page, 1)
-    const pageSize = Math.min(normalizePositiveInt(params.pageSize, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE)
+    const pageSize = Math.min(
+      normalizePositiveInt(params.pageSize, DEFAULT_PAGE_SIZE),
+      MAX_PAGE_SIZE,
+    )
 
     const { text } = await requestText(this.transport, {
       method: 'GET',
@@ -66,7 +69,10 @@ export class WeKnoraClient {
         page_size: pageSize,
         keyword: params.keyword,
         sort_by: params.sortBy,
-        tag_ids: params.tagIds !== undefined && params.tagIds.length > 0 ? params.tagIds.join(',') : undefined,
+        tag_ids:
+          params.tagIds !== undefined && params.tagIds.length > 0
+            ? params.tagIds.join(',')
+            : undefined,
       },
     })
 
@@ -130,12 +136,20 @@ export class WeKnoraClient {
 
   /** 方法 3：预览（内联渲染用，小文件整取） */
   async preview(knowledgeId: string, signal?: AbortSignal): Promise<WeKnoraBinary> {
-    return this.fetchBinary(`/api/v1/knowledge/${encodeURIComponent(knowledgeId)}/preview`, signal, true)
+    return this.fetchBinary(
+      `/api/v1/knowledge/${encodeURIComponent(knowledgeId)}/preview`,
+      signal,
+      true,
+    )
   }
 
   /** 方法 4：下载（流式透传，不全量进内存） */
   async download(knowledgeId: string, signal?: AbortSignal): Promise<WeKnoraBinary> {
-    return this.fetchBinary(`/api/v1/knowledge/${encodeURIComponent(knowledgeId)}/download`, signal, false)
+    return this.fetchBinary(
+      `/api/v1/knowledge/${encodeURIComponent(knowledgeId)}/download`,
+      signal,
+      false,
+    )
   }
 
   /** 方法 7：批量下载（POST，返回任务/结果对象原样） */
@@ -178,11 +192,17 @@ export class WeKnoraClient {
 
   /**
    * 方法 6：向指定知识库提问，返回 SSE 事件异步迭代器（调用方负责转成 HTTP 流）。
-   * 超时策略：流式不走 15s 非流式超时，改用 timeoutMs 总时长上限（默认 180s）。
+   * 超时策略：流式不走 15s 非流式超时，改用 timeoutMs 总时长上限（默认 180s）；
+   * 外部 signal（如 HTTP 客户端断开）同样中止上游，避免 WeKnora 白跑一次模型。
    * 知识库缺省时用 .env 的 WEKNORA_KB_ID。
    */
-  async askKnowledgeBase(params: AskKnowledgeParams): Promise<AsyncGenerator<AskEvent, void, void>> {
-    const kbIds = params.knowledgeBaseIds.length > 0 ? [...params.knowledgeBaseIds] : [this.config.knowledgeBaseId]
+  async askKnowledgeBase(
+    params: AskKnowledgeParams,
+  ): Promise<AsyncGenerator<AskEvent, void, void>> {
+    const kbIds =
+      params.knowledgeBaseIds.length > 0
+        ? [...params.knowledgeBaseIds]
+        : [this.config.knowledgeBaseId]
     const path = `/api/v1/knowledge-chat/${encodeURIComponent(params.sessionId)}`
     const controller = new AbortController()
     const timeoutMs = params.timeoutMs ?? DEFAULT_SSE_TIMEOUT_MS
@@ -192,6 +212,14 @@ export class WeKnoraClient {
             controller.abort()
           }, timeoutMs)
         : null
+    // 外部取消（客户端断开）与总时长上限共用同一个 controller，谁先触发都算中止
+    const onExternalAbort = (): void => {
+      controller.abort()
+    }
+    if (params.signal !== undefined) {
+      if (params.signal.aborted) controller.abort()
+      else params.signal.addEventListener('abort', onExternalAbort, { once: true })
+    }
 
     try {
       const { response } = await requestStream(this.transport, {
@@ -221,7 +249,11 @@ export class WeKnoraClient {
   // ---------------------------------------------------------------- 内部
 
   /** preview / download 共用：统一读 Content-* 头，超大文件只给 stream 不进内存 */
-  private async fetchBinary(path: string, signal: AbortSignal | undefined, inline: boolean): Promise<WeKnoraBinary> {
+  private async fetchBinary(
+    path: string,
+    signal: AbortSignal | undefined,
+    inline: boolean,
+  ): Promise<WeKnoraBinary> {
     const { response } = await requestStream(this.transport, {
       method: 'GET',
       path,
@@ -235,7 +267,13 @@ export class WeKnoraClient {
 
     // 只有 preview（内联、体积小）才整取字节；download 保持流式由调用方 pipe
     if (!inline) {
-      return { contentType, contentDisposition, contentLength, bytes: new Uint8Array(0), stream: response.body }
+      return {
+        contentType,
+        contentDisposition,
+        contentLength,
+        bytes: new Uint8Array(0),
+        stream: response.body,
+      }
     }
     const bytes = new Uint8Array(await response.arrayBuffer())
     return { contentType, contentDisposition, contentLength, bytes, stream: null }

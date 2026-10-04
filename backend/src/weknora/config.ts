@@ -1,8 +1,7 @@
 // 契约（模块内）：从 backend/.env 读取 WeKnora 配置
 // 红线：密钥只从环境变量读，源码里不得出现任何 key 字面量。
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import type { WeKnoraConfig } from './types.js'
 
 /** 任务卡规定：非流式默认超时 15s */
@@ -12,8 +11,18 @@ export const DEFAULT_RETRIES = 2
 /** SSE 默认总时长上限（长回答兜底；不与 15s 非流式超时混用） */
 export const DEFAULT_SSE_TIMEOUT_MS = 180_000
 
-/** backend/.env 绝对路径（src/weknora/config.ts -> ../../.env；dist/weknora/config.js 同深度同样成立） */
-export const ENV_FILE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env')
+/**
+ * 定位 backend/.env。
+ * 不用 import.meta.url：backend/package.json 未设 "type":"module"，tsconfig.build.json 按 CJS 出包，
+ * 用 import.meta 会触发 tsc TS1470（CommonJS 不允许 import.meta）。改从 cwd 找：
+ * 先 <cwd>/.env（npm workspace 脚本的 cwd 就是 backend/），再 <cwd>/backend/.env（从仓库根直接跑 tsx 时）。
+ */
+export function resolveEnvFilePath(cwd: string = process.cwd()): string | null {
+  for (const candidate of [resolve(cwd, '.env'), resolve(cwd, 'backend', '.env')]) {
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
 
 /**
  * 极简 .env 解析（仅 KEY=VALUE，忽略 # 注释与空行，支持成对引号包裹）。
@@ -41,8 +50,9 @@ export function parseEnvFile(text: string): Record<string, string> {
 
 /** 把 backend/.env 灌进 process.env（已存在的键不覆盖，进程环境优先） */
 export function loadEnvFile(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  if (!existsSync(ENV_FILE_PATH)) return env
-  for (const [key, value] of Object.entries(parseEnvFile(readFileSync(ENV_FILE_PATH, 'utf8')))) {
+  const path = resolveEnvFilePath()
+  if (path === null) return env
+  for (const [key, value] of Object.entries(parseEnvFile(readFileSync(path, 'utf8')))) {
     if (env[key] === undefined) env[key] = value
   }
   return env

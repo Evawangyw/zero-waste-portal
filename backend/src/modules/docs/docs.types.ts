@@ -1,7 +1,8 @@
 // 契约：GET /api/docs 的响应体
-// 验收：curl http://localhost:4000/api/docs => 200，JSON 数组，含 title 与 custom_metadata。
+// 验收：curl http://localhost:4000/api/docs => 200，JSON 数组，每项含 title 与 custom_metadata。
+// total 走响应头 X-Total-Count（成功体按任务卡要求是裸数组，不裹信封）。
 // 边界（任务卡）：本卡只做"把标题+元数据透出"，书架的筛选/排序是 T03 的事。
-import type { ListKnowledgeParams } from '../../weknora/index.js'
+import type { ListKnowledgeParams, WeKnoraErrorKind } from '../../weknora/index.js'
 
 /** 单条资料的对外视图（字段名保持前端直接可用的 camelCase） */
 export interface DocSummary {
@@ -22,8 +23,11 @@ export interface DocsQuery extends ListKnowledgeParams {
   readonly limit?: number | undefined
 }
 
-export interface DocsResponse {
-  readonly success: boolean
-  readonly total: number
-  readonly items: readonly DocSummary[]
+/** 出错时的响应体（成功时直接返回 DocSummary[] 数组，故这里单列） */
+export interface DocsErrorResponse {
+  readonly success: false
+  readonly error: {
+    readonly kind: WeKnoraErrorKind
+    readonly message: string
+  }
 }

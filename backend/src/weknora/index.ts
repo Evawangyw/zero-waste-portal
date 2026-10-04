@@ -6,11 +6,12 @@ export {
   DEFAULT_RETRIES,
   DEFAULT_SSE_TIMEOUT_MS,
   DEFAULT_TIMEOUT_MS,
-  ENV_FILE_PATH,
   loadEnvFile,
   loadWeKnoraConfig,
   parseEnvFile,
+  resolveEnvFilePath,
 } from './config.js'
+export { parseSseStream, isTerminalEvent } from './sse.js'
 export { syncIndex } from './sync-index.js'
 export type { SyncIndexOptions, SyncIndexResult } from './sync-index.js'
 export type {

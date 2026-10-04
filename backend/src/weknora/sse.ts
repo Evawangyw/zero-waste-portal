@@ -49,7 +49,9 @@ function toAskEvent(event: string, data: string): AskEvent | null {
  * （stop/error 同样终止）。依据：WeKnora 前端 useChatStreamHandler 只在 complete 分支收尾。
  */
 export function isTerminalEvent(evt: AskEvent): boolean {
-  return evt.responseType === 'complete' || evt.responseType === 'stop' || evt.responseType === 'error'
+  return (
+    evt.responseType === 'complete' || evt.responseType === 'stop' || evt.responseType === 'error'
+  )
 }
 
 /**
@@ -82,7 +84,7 @@ export async function* parseSseStream(
         if (evt === null) continue
         emitted += 1
         yield evt
-        if (evt.done) return
+        if (isTerminalEvent(evt)) return
         if (emitted >= maxEvents) return
       }
     }
