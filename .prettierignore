@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+package-lock.json
+*.md
+.env
+.env.*
+!.env.example
+prisma/migrations/
+*.png
+*.jpg
+*.svg

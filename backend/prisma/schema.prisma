@@ -1,0 +1,106 @@
+// 零废弃知识库 · 自有数据库 schema 骨架（T00）
+// 字段来源：《P3P4-开发总规划与任务拆解.md》v1.1 §5「数据表」
+// 注意：datasource 直接复用既有 backend/.env 里的 DB_URL（禁止改动 .env）。
+// 本卡只做 schema 骨架，不做 migrate 落库。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DB_URL")
+}
+
+/// 注册用户（公众五字段注册：姓名/机构/职业/关注议题/电话 + 密码哈希）
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  org          String
+  occupation   String
+  /// 关注议题（多选，落库用逗号分隔的标签串）
+  topics       String   @default("")
+  phone        String
+  /// 密码哈希（argon2/bcrypt 哈希串，明文密码永不入库）
+  passwordHash String
+  /// 是否管理员（看板可见性控制）
+  isAdmin      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 反向关系（Prisma 要求关系两端都有声明）
+  questions    QuestionLog[]
+  downloads    DownloadLog[]
+  submissions  Submission[]
+
+  @@map("users")
+}
+
+/// 提问日志（看板：提问趋势 / 无答案率 / 热词）
+/// 数据来源待 V2 验证后确定（API 轮询 或 前端埋点），字段口径两种方案都兼容。
+model QuestionLog {
+  id        String   @id @default(cuid())
+  /// 会话 ID（WeKnora session id）
+  sessionId String
+  /// 提问原文
+  question  String
+  /// 是否命中知识库（false = 无答案）
+  hit       Boolean  @default(false)
+  /// 来源：widget=官方挂件，api=轮询拉取，web=自建前端埋点
+  source    String   @default("widget")
+  /// 可选关联提问人（挂件免登录时为空）
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([sessionId])
+  @@map("question_logs")
+}
+
+/// 下载日志（看板：下载排行）
+model DownloadLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// WeKnora 知识（文件）ID
+  docId     String
+  /// 文件名快照，便于看板展示与历史留痕
+  docTitle  String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([docId])
+  @@map("download_logs")
+}
+
+/// 公众提交的资料（P2：状态「待审核」，通过后由管理员手动在 WeKnora 后台入库）
+/// 状态取值：pending=待审核，approved=通过，rejected=驳回
+model Submission {
+  id             String   @id @default(cuid())
+  /// 提交人（可为空：免登录提交）
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  title          String
+  org            String   @default("")
+  year           String   @default("")
+  docType        String   @default("")
+  domain         String   @default("")
+  /// 提交内容说明
+  description    String   @default("")
+  /// 文件存储位置（P2 落地时确定：自建上传 or 外部链接）
+  fileUrl        String?
+  fileName       String   @default("")
+  status         String   @default("pending")
+  /// 审核意见
+  reviewComment  String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status])
+  @@map("submissions")
+}
+
+// 关系说明：
+// - User 1—N QuestionLog / DownloadLog / Submission
+// - 三张日志表都用 onDelete 语义：删用户时日志保留（SetNull）或级联清理（DownloadLog）
