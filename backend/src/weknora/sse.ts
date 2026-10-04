@@ -42,8 +42,19 @@ function toAskEvent(event: string, data: string): AskEvent | null {
 }
 
 /**
+ * ⚠️ 协议实测修正（2026-10-05，用掉第 2 次 query 取证）：
+ * WeKnora 每个事件都可能带 done:true，它只表示"该消息片段完结"，**不是**整段流结束。
+ * 实测首帧就是 {"response_type":"agent_query","done":true,"content":""} 的入队确认帧；
+ * 若见 done 就断流，正文一个字都拿不到。真正的终止信号是 response_type=complete
+ * （stop/error 同样终止）。依据：WeKnora 前端 useChatStreamHandler 只在 complete 分支收尾。
+ */
+export function isTerminalEvent(evt: AskEvent): boolean {
+  return evt.responseType === 'complete' || evt.responseType === 'stop' || evt.responseType === 'error'
+}
+
+/**
  * 把 ReadableStream<Uint8Array> 解析为 AskEvent 异步迭代器。
- * maxEvents 只用于防御上游无限流（正常 done:true 会提前结束）。
+ * 不因 done 提前返回（见上方 isTerminalEvent 注释）；maxEvents 只用于防御上游异常无限流。
  */
 export async function* parseSseStream(
   body: ReadableStream<Uint8Array>,

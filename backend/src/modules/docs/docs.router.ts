@@ -21,8 +21,8 @@ async function handleDocs(req: Request, res: Response): Promise<void> {
   try {
     const result = await client.listKnowledge({
       knowledgeBaseId: query.knowledgeBaseId,
-      page: query.page ?? 1,
-      pageSize: query.limit ?? DEFAULT_LIMIT,
+      page: query.page,
+      pageSize: query.limit,
       keyword: query.keyword,
       sortBy: query.sortBy,
       tagIds: query.tagIds,
@@ -45,35 +45,40 @@ async function handleDocs(req: Request, res: Response): Promise<void> {
   }
 }
 
-/** query 解析：只认白名单键，数字非法则回落默认 */
+/**
+ * query 解析：只认白名单键。
+ * ⚠️ 缺失键必须真给 undefined —— 曾踩坑：String(undefined).split(',') 会得到 ['undefined']，
+ * 下游 tag_ids=undefined 被 WeKnora 当真实标签过滤，列表直接空掉。
+ */
 function parseDocsQuery(raw: unknown): DocsQuery {
   const q = isRecord(raw) ? raw : {}
+  const tagIdsRaw = readString(q['tagIds'])
   return {
     knowledgeBaseId: readString(q['knowledgeBaseId']),
     page: readInt(q['page'], 1),
     limit: Math.min(readInt(q['limit'], DEFAULT_LIMIT), MAX_LIMIT),
     keyword: readString(q['keyword']),
     sortBy: readString(q['sortBy']),
-    tagIds: readString(q['tagIds']) === '' ? undefined : String(q['tagIds']).split(','),
+    tagIds: tagIdsRaw === undefined ? undefined : tagIdsRaw.split(','),
   }
 }
 
 /** 对接层错误 -> HTTP 状态码（前端能区分"未授权"与"引擎挂了"） */
 function respondError(res: Response, err: unknown): void {
   const error = WeKnoraError.from(err, '/api/docs')
-  const status = statusFor(error.kind)
-  res.status(status).json({
+  res.status(statusFor(error.kind)).json({
     success: false,
     error: { kind: error.kind, message: error.message },
     items: [],
   })
 }
 
+/** 我方配置问题（401/403）对前端统一报 502，不泄露内网鉴权细节 */
 function statusFor(kind: WeKnoraError['kind']): number {
   switch (kind) {
     case 'unauthorized':
     case 'forbidden':
-      return 502 // 我方配置问题，对外不暴露 401/403 细节
+      return 502
     case 'not_found':
       return 404
     case 'rate_limited':

@@ -28,6 +28,7 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   }
 
   const client = WeKnoraClient.fromEnv()
+  const debug = req.query['debug'] === '1'
   let events: AsyncGenerator<AskEvent, void, void>
   try {
     const session = await client.createSession(`web:${body.query.slice(0, 30)}`)
@@ -61,6 +62,11 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   try {
     for await (const evt of events) {
       if (clientGone.signal.aborted) break
+      if (debug) {
+        writeSse(res, { type: 'raw', content: JSON.stringify(evt.raw), responseType: evt.responseType })
+        if (evt.done) break
+        continue
+      }
       if (evt.done) {
         writeSse(res, { type: 'done', content: evt.content })
         break
