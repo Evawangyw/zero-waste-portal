@@ -3,6 +3,7 @@
 import express from 'express'
 import type { Express } from 'express'
 import { askRouter } from './modules/ask/index.js'
+import { authRouter } from './modules/auth/index.js'
 import { docsRouter } from './modules/docs/index.js'
 import { healthRouter } from './modules/health/index.js'
 
@@ -20,6 +21,11 @@ export function createApp(): Express {
   //   POST /api/ask  -> SSE 流式问答（服务端持会话，不外泄 sessionId）
   app.use(docsRouter)
   app.use(askRouter)
+
+  // T02：自建用户体系（与 WeKnora 账号隔离）
+  //   POST /api/auth/register | POST /api/auth/login | GET /api/auth/me
+  // 登录守卫 requireAuth 由 auth 模块导出，本卡只用于 /me；下载/提问守卫待 T04/T06 自行挂载。
+  app.use(authRouter)
 
   return app
 }

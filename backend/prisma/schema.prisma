@@ -18,10 +18,11 @@ model User {
   name         String
   org          String
   occupation   String
-  /// 关注议题（多选，落库用逗号分隔的标签串）
-  topics       String   @default("")
-  phone        String
-  /// 密码哈希（argon2/bcrypt 哈希串，明文密码永不入库）
+  /// 关注议题（多选数组，落库用 JSON 数组串，如 ["塑料污染","食物浪费"]；读出时 JSON.parse）
+  topics       String   @default("[]")
+  /// 联系电话（11 位手机号；T02 加唯一约束 -> 重复注册返回 409）
+  phone        String   @unique
+  /// 密码哈希（bcrypt 哈希串，明文密码永不入库）
   passwordHash String
   /// 是否管理员（看板可见性控制）
   isAdmin      Boolean  @default(false)
