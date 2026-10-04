@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "sync:index": "tsx src/weknora/sync-index.cli.ts"
+    "sync:index": "tsx src/modules/docs/docs.shelf.sync.cli.ts",
+    "sync:index:raw": "tsx src/weknora/sync-index.cli.ts",
+    "test:shelf": "tsx src/modules/docs/docs.shelf.selftest.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -78,6 +78,21 @@ export function loadWeKnoraConfig(env: NodeJS.ProcessEnv = process.env): WeKnora
   }
 }
 
+/**
+ * 只取默认知识库 ID。
+ * 书架层（docs 模块）要按知识库圈定索引范围，但不该为了拿一个 KB_ID 就被迫校验 API key，
+ * 故单开一个"不强制要求密钥"的读取口。缺失时返回 undefined（调用方按"不限库"处理）。
+ */
+export function loadDefaultKnowledgeBaseId(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const merged = env === process.env ? loadEnvFile(env) : env
+  const raw = merged['WEKNORA_KB_ID']
+  if (raw === undefined) return undefined
+  const trimmed = raw.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
 function readInt(raw: string | undefined, min: number): number | undefined {
   if (raw === undefined || raw.trim() === '') return undefined
   const n = Number(raw)

@@ -1,7 +1,8 @@
-// 契约：GET /api/docs 的响应体
-// 验收：curl http://localhost:4000/api/docs => 200，JSON 数组，每项含 title 与 custom_metadata。
+// 契约：GET /api/docs/weknora 的响应体（T03 起该路径为「实时透传 WeKnora」的原始通道）
+// ⚠️ T03 已把 `/api/docs` 改为书架查询（见 docs.shelf.types.ts 的 ShelfListResponse）。
+// 验收：curl http://localhost:4000/api/docs/weknora => 200，JSON 数组，每项含 title 与 customMetadata。
 // total 走响应头 X-Total-Count（成功体按任务卡要求是裸数组，不裹信封）。
-// 边界（任务卡）：本卡只做"把标题+元数据透出"，书架的筛选/排序是 T03 的事。
+// 边界：本文件只负责"把标题+元数据透出"；书架的筛选/排序在 docs.shelf.* 里。
 import type { ListKnowledgeParams, WeKnoraErrorKind } from '../../weknora/index.js'
 
 /** 单条资料的对外视图（字段名保持前端直接可用的 camelCase） */

@@ -6,6 +6,7 @@ export {
   DEFAULT_RETRIES,
   DEFAULT_SSE_TIMEOUT_MS,
   DEFAULT_TIMEOUT_MS,
+  loadDefaultKnowledgeBaseId,
   loadEnvFile,
   loadWeKnoraConfig,
   parseEnvFile,
@@ -13,7 +14,12 @@ export {
 } from './config.js'
 export { parseSseStream, isTerminalEvent } from './sse.js'
 export { syncIndex } from './sync-index.js'
-export type { SyncIndexOptions, SyncIndexResult } from './sync-index.js'
+export type {
+  KnowledgeIndexRow,
+  KnowledgeIndexRowMapper,
+  SyncIndexOptions,
+  SyncIndexResult,
+} from './sync-index.js'
 export type {
   AskEvent,
   AskKnowledgeParams,

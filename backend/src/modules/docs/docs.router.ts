@@ -1,6 +1,7 @@
 // 模块边界：docs
-// 契约：GET /api/docs -> 200 { success, total, items:[{ id, title, customMetadata, ... }] }
-// 实现：只允许经 weknora 对接层取数；本模块不做筛选/排序逻辑（T03 负责）。
+// 契约：GET /api/docs/weknora -> 200 [ { id, title, customMetadata, ... } ]（裸数组，total 走 X-Total-Count 头）
+// ⚠️ T03 起 `/api/docs` 归书架层（docs.shelf.router，查 SQLite）；本路由保留为「实时透传 WeKnora」的
+// 原始通道，路径改为 /api/docs/weknora，处理器逻辑一行未改，便于回查引擎真实数据与排障。
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { WeKnoraClient, WeKnoraError } from '../../weknora/index.js'
@@ -11,7 +12,7 @@ const MAX_LIMIT = 200
 
 export const docsRouter: Router = Router()
 
-docsRouter.get('/api/docs', (req: Request, res: Response) => {
+docsRouter.get('/api/docs/weknora', (req: Request, res: Response) => {
   void handleDocs(req, res)
 })
 
