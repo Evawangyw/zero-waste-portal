@@ -101,6 +101,34 @@ model Submission {
   @@map("submissions")
 }
 
+/// 知识元数据索引（T01）
+/// 来源：WeKnora `GET /api/v1/knowledge-bases/:id/knowledge` 的每条 knowledge。
+/// 用途：供后续「书架」按 年份/知识类型/知识领域/发布机构 筛选与排序（T03）。
+/// 约束（主控已实测）：WeKnora keyword 搜不到 custom_metadata 值，列表接口也没有
+/// 按元数据筛选/排序的参数 —— 所以筛选能力必须落在本表，故必须本地全量索引。
+/// 注意：WeKnora 侧 tag_ids 用逗号串，SQLite 无原生数组/JSON 列，故用 String 存序列化值。
+model KnowledgeIndex {
+  /// WeKnora knowledge id（跨库唯一，直接作主键，upsert 用）
+  knowledgeId     String   @id
+  /// 所属 WeKnora 知识库 ID（便于多库场景按库刷新/清理）
+  knowledgeBaseId String   @default("")
+  title           String
+  /// 自定义元数据 JSON 串（键如 年份/知识类型/知识领域/知识发布机构）
+  customMetadata  String   @default("{}")
+  /// 标签 JSON 数组串（WeKnora 侧 tags 可能是 null，这里统一存 "[]"）
+  tags            String   @default("[]")
+  /// WeKnora 侧最后更新时间（原样保留）
+  sourceUpdatedAt DateTime?
+  /// 本地索引时间（每次 upsert 刷新）
+  syncedAt        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([knowledgeBaseId])
+  @@map("knowledge_index")
+}
+
 // 关系说明：
 // - User 1—N QuestionLog / DownloadLog / Submission
 // - 三张日志表都用 onDelete 语义：删用户时日志保留（SetNull）或级联清理（DownloadLog）
+// - KnowledgeIndex 与 User 无关系：纯 WeKnora 侧镜像表（独立落库、独立清理）

@@ -10,7 +10,9 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "sync:index": "tsx src/weknora/sync-index.cli.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
