@@ -5,6 +5,7 @@ import type { Express } from 'express'
 import { askRouter } from './modules/ask/index.js'
 import { authRouter } from './modules/auth/index.js'
 import { docsRouter, fileRouter, shelfRouter } from './modules/docs/index.js'
+import { embedRouter } from './modules/embed/index.js'
 import { healthRouter } from './modules/health/index.js'
 
 export function createApp(): Express {
@@ -40,6 +41,13 @@ export function createApp(): Express {
   //   POST /api/auth/register | POST /api/auth/login | GET /api/auth/me
   // 登录守卫 requireAuth 由 auth 模块导出，本卡只用于 /me；下载/提问守卫待 T04/T06 自行挂载。
   app.use(authRouter)
+
+  // T06：挂件凭证交换（安全模式：publish token 只在后端，浏览器只拿 30 分钟短效 session token）
+  //   POST /api/embed/token   卡片正式契约（Origin 校验 + 换 session_token + Q1 登录开关）
+  //   GET  /api/embed/token   同一处理器的 GET 变体（官方 weknora-widget.js loader 只发 GET）
+  //   GET  /api/embed/config  挂件公开配置（channelId/基址/token 接口，无密钥）
+  // 路由与 /api/docs/*、/api/auth/*、/api/ask 全不重叠，挂在最后即可。
+  app.use(embedRouter)
 
   return app
 }

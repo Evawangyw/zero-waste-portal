@@ -1,107 +1,224 @@
 <script setup lang="ts">
-import type { CardItem } from '../types/placeholder'
+// 首页（T05）：第一屏 = AI 提问入口（主）+ 搜索框（次，跳书架）+ 3 个示例问题。
+//
+// 挂件按官方「安全模式」接（见 composables/useWidget.ts），本页面不自己写问答 UI。
+// 页面只做两件事：把用户的问题交给挂件（openWithQuery）、把关键词交给书架（路由 query）。
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { SAMPLE_QUESTIONS } from '../constants'
+import {
+  askWidget,
+  flushPendingQuery,
+  mountWidget,
+  widgetError,
+  widgetStatus,
+} from '../composables/useWidget'
+import { currentUser } from '../composables/useAuth'
 
-interface FeatureInfo {
-  readonly title: string
-  readonly desc: string
+const router = useRouter()
+
+const keyword = ref('')
+const customQuestion = ref('')
+
+onMounted(() => {
+  // 官方 loader 就绪后补发排队中的问题（用户在脚本到达前点了示例问题的场景）
+  window.setTimeout(() => {
+    flushPendingQuery()
+  }, 800)
+  void mountWidget()
+})
+
+/** 点示例问题 -> 交给挂件自动发送 */
+function onSampleQuestion(text: string): void {
+  askWidget(text)
 }
 
-const features: readonly CardItem<FeatureInfo>[] = [
-  { title: '资料书架', desc: '按机构 / 年份 / 类型 / 标签检索零废弃政策与研究报告' },
-  { title: 'AI 问答', desc: '基于知识库生成带出处的回答，答案不足会明确告知' },
-  { title: '公众提交', desc: '欢迎提交你的资料，审核通过后正式入库' },
-  { title: '数据看板', desc: '提问量、无答案率、热门下载一屏掌握' },
-]
+/** 自己写个问题 -> 也走挂件（与示例问题同一条通路，不另造 UI） */
+function onCustomAsk(): void {
+  const text = customQuestion.value.trim()
+  if (text === '') {
+    ElMessage.warning('请先输入你的问题')
+    return
+  }
+  askWidget(text)
+}
 
-const tag = 'zero-waste-portal · T00 脚手架'
+/** 搜索框（次要入口）-> 跳书架并带上关键词 */
+function onSearch(): void {
+  const text = keyword.value.trim()
+  void router.push(text === '' ? { path: '/shelf' } : { path: '/shelf', query: { q: text } })
+}
 </script>
 
 <template>
-  <el-container class="placeholder-page">
-    <el-header class="placeholder-header">
-      <span class="brand">零废弃知识库</span>
-      <el-tag type="info" size="small" effect="plain">{{ tag }}</el-tag>
-    </el-header>
+  <div class="home">
+    <el-card class="ask-card" shadow="never">
+      <h1 class="title">问点什么</h1>
+      <p class="subtitle">
+        下面是 AI 助手（右下角 💬 挂件）。它只依据本知识库里的零废弃政策与实践资料回答，
+        资料里没有的它会直说没有，不会编。
+      </p>
 
-    <el-main>
-      <el-card shadow="never" class="hero-card">
-        <h1 class="hero-title">零废弃知识库</h1>
-        <p class="hero-desc">
-          面向公众的零废弃政策与实践资料库。当前为工程脚手架占位页，业务页面由后续任务卡接入。
-        </p>
+      <!-- 自定义提问 -->
+      <div class="custom-ask">
+        <el-input
+          v-model="customQuestion"
+          placeholder="例如：社区厨余堆肥活动怎么设计？"
+          clearable
+          @keyup.enter="onCustomAsk"
+        />
+        <el-button type="primary" @click="onCustomAsk">向 AI 提问</el-button>
+      </div>
+
+      <!-- 示例问题（PRD 两类场景 + 政策原文式） -->
+      <div class="samples">
+        <span class="samples-label">试试这些问题：</span>
         <el-space wrap>
-          <el-button type="primary" disabled>资料书架（待接入）</el-button>
-          <el-button disabled>AI 问答（待接入）</el-button>
+          <el-button
+            v-for="item in SAMPLE_QUESTIONS"
+            :key="item.text"
+            plain
+            size="small"
+            @click="onSampleQuestion(item.text)"
+          >
+            {{ item.scene }}：{{ item.text }}
+          </el-button>
         </el-space>
-      </el-card>
+      </div>
 
-      <el-row :gutter="16" class="feature-row">
-        <el-col v-for="item in features" :key="item.title" :xs="24" :sm="12" :lg="6">
-          <el-card shadow="hover" class="feature-card">
-            <template #header>
-              <strong>{{ item.title }}</strong>
-            </template>
-            <span class="feature-desc">{{ item.desc }}</span>
-          </el-card>
-        </el-col>
-      </el-row>
-
+      <!-- 挂件状态提示（失败时降级提示，不让整页挂掉） -->
       <el-alert
-        class="t00-note"
-        type="info"
+        v-if="widgetStatus === 'error'"
+        class="widget-alert"
+        type="warning"
         show-icon
         :closable="false"
-        title="T00 空壳说明"
-        description="前端仅验证 Vite + Vue3 + TypeScript + Element Plus 可跑通；页面不含任何业务路由与接口调用。"
+        title="AI 助手暂不可用"
+        :description="`${widgetError}；你也可以直接用下面的搜索框去书架找资料。`"
       />
-    </el-main>
-  </el-container>
+      <p v-else-if="widgetStatus === 'idle' || widgetStatus === 'loading'" class="widget-loading">
+        AI 助手加载中…（若长时间未出现，请检查右下角是否被浏览器扩展遮挡）
+      </p>
+      <p v-else class="widget-ok">AI 助手已就绪，点右下角 💬 打开，或直接点上面的示例问题。</p>
+
+      <p v-if="currentUser" class="widget-user">
+        已登录（{{ currentUser.name }}），提问会带上你的身份信息；未登录也可以问。
+      </p>
+    </el-card>
+
+    <el-card class="search-card" shadow="never">
+      <h2 class="subtitle-title">或者，自己翻书架</h2>
+      <div class="search-row">
+        <el-input
+          v-model="keyword"
+          placeholder="按文件名/标题搜索，如：垃圾分类"
+          clearable
+          @keyup.enter="onSearch"
+        />
+        <el-button @click="onSearch">去书架搜</el-button>
+      </div>
+      <p class="tips">
+        书架支持按年份、发布机构、知识类型、主题多维筛选，共 42 条零废弃政策与实践资料。
+      </p>
+    </el-card>
+
+    <el-row class="entries" :gutter="16">
+      <el-col :xs="24" :sm="12" :lg="8">
+        <el-card shadow="hover" class="entry-card">
+          <template #header><strong>资料书架</strong></template>
+          <p>42 条政策与实践资料，按四个维度筛选，带在线预览与下载。</p>
+          <router-link to="/shelf">
+            <el-button type="primary" plain size="small">进入书架</el-button>
+          </router-link>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="8">
+        <el-card shadow="hover" class="entry-card">
+          <template #header><strong>AI 助手</strong></template>
+          <p>免登录提问，答案带出处；答不出来会明说，不猜。</p>
+          <el-button size="small" @click="onSampleQuestion(SAMPLE_QUESTIONS[0].text)">
+            问一个试试
+          </el-button>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="8">
+        <el-card shadow="hover" class="entry-card">
+          <template #header><strong>注册账号</strong></template>
+          <p>注册后可下载资料，提问时自动带上你的机构与关注议题。</p>
+          <router-link to="/auth">
+            <el-button size="small">去注册</el-button>
+          </router-link>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
 </template>
 
 <style scoped>
-.placeholder-page {
-  min-height: 100vh;
-}
-
-.placeholder-header {
+.home {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--el-border-color-light);
+  flex-direction: column;
+  gap: 16px;
 }
 
-.brand {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--el-color-primary);
+.title {
+  margin: 0 0 8px;
+  font-size: 26px;
 }
 
-.hero-card {
-  margin-bottom: 20px;
-}
-
-.hero-title {
-  margin: 0 0 12px;
-  font-size: 30px;
-  line-height: 1.3;
-}
-
-.hero-desc {
-  margin: 0 0 20px;
+.subtitle,
+.tips {
+  margin: 0 0 16px;
   color: var(--el-text-color-secondary);
   line-height: 1.7;
 }
 
-.feature-row {
-  margin-bottom: 20px;
+.subtitle-title {
+  margin: 0 0 12px;
+  font-size: 18px;
 }
 
-.feature-card {
+.custom-ask {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.samples {
+  margin-bottom: 12px;
+}
+
+.samples-label {
+  margin-right: 8px;
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+}
+
+.widget-alert {
+  margin-top: 8px;
+}
+
+.widget-loading,
+.widget-ok,
+.widget-user {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.search-row {
+  display: flex;
+  gap: 12px;
+}
+
+.entry-card {
   height: 100%;
 }
 
-.feature-desc {
-  color: var(--el-text-color-regular);
+.entry-card p {
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
   line-height: 1.7;
 }
 </style>
