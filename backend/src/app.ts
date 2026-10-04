@@ -4,7 +4,7 @@ import express from 'express'
 import type { Express } from 'express'
 import { askRouter } from './modules/ask/index.js'
 import { authRouter } from './modules/auth/index.js'
-import { docsRouter, shelfRouter } from './modules/docs/index.js'
+import { docsRouter, fileRouter, shelfRouter } from './modules/docs/index.js'
 import { healthRouter } from './modules/health/index.js'
 
 export function createApp(): Express {
@@ -27,6 +27,14 @@ export function createApp(): Express {
   app.use(shelfRouter)
   app.use(docsRouter)
   app.use(askRouter)
+
+  // T04：单条资料的文件三路由（docs 模块自己的 fileRouter）
+  //   GET /api/docs/:id           -> 详情（元数据全量 + 解析后的年份/机构/类型/领域 + 摘要）
+  //   GET /api/docs/:id/preview   -> 在线预览（流式；非原生类型/超 20MB 回 unsupported/tooLarge）
+  //   GET /api/docs/:id/download  -> 下载（**登录闸门**：requireAuth 解 JWT；写 DownloadLog + 重命名文件名）
+  // 挂载位置说明：必须排在 shelfRouter 之后 —— shelfRouter 只精确匹配 /api/docs 与
+  // /api/docs/facets 两个路径，不会吃掉 /api/docs/:id，故顺序只影响可读性不影响行为。
+  app.use(fileRouter)
 
   // T02：自建用户体系（与 WeKnora 账号隔离）
   //   POST /api/auth/register | POST /api/auth/login | GET /api/auth/me

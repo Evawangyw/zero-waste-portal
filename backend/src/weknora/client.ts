@@ -143,6 +143,21 @@ export class WeKnoraClient {
     )
   }
 
+  /**
+   * 方法 3b：预览（流式透传，**不**整读进内存）。
+   * T04 预览路由专用：桌面浏览器要原生渲染 PDF，整取 arrayBuffer 会把
+   * 20MB 文件整个搬进 Node 内存。这里只取 Content-* 头 + ReadableStream，
+   * 由调用方 pipe 给浏览器。既有 preview() 行为不变（内联小图/预览卡片仍在用）。
+   */
+  async previewStream(knowledgeId: string, signal?: AbortSignal): Promise<WeKnoraBinary> {
+    return this.fetchBinary(
+      `/api/v1/knowledge/${encodeURIComponent(knowledgeId)}/preview`,
+      signal,
+      // inline=false -> fetchBinary 只回 stream，不读字节；超时给足 120s 与下载一致
+      false,
+    )
+  }
+
   /** 方法 4：下载（流式透传，不全量进内存） */
   async download(knowledgeId: string, signal?: AbortSignal): Promise<WeKnoraBinary> {
     return this.fetchBinary(

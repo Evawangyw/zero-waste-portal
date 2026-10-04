@@ -60,14 +60,17 @@ model QuestionLog {
 }
 
 /// 下载日志（看板：下载排行）
+/// T04 起真正写入：GET /api/docs/:id/download 每次成功开流前记一条。
 model DownloadLog {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// WeKnora 知识（文件）ID
-  docId     String
-  /// 文件名快照，便于看板展示与历史留痕
-  docTitle  String   @default("")
+  docId    String
+  /// 资料标题快照，便于看板展示与历史留痕
+  docTitle String @default("")
+  /// T04：实际下发给浏览器的重命名文件名（"年份-机构-标题.ext"）
+  fileName String @default("")
   createdAt DateTime @default(now())
 
   @@index([createdAt])
