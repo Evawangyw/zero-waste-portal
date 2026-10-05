@@ -182,6 +182,20 @@ function onSearch(): void {
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card class="org-card" shadow="never">
+      <div class="org-row">
+        <div>
+          <h2 class="subtitle-title">安徽省六尺巷慈善基金会</h2>
+          <p class="tips">
+            本知识库关注的零废弃议题，也是这家基金会官网的工作专栏之一。可以先看机构愿景、工作领域和公开信息。
+          </p>
+        </div>
+        <router-link to="/foundation">
+          <el-button type="primary" plain>查看机构介绍</el-button>
+        </router-link>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -250,5 +264,23 @@ function onSearch(): void {
   margin: 0 0 12px;
   color: var(--el-text-color-secondary);
   line-height: 1.7;
+}
+
+.org-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.org-card .tips {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .org-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

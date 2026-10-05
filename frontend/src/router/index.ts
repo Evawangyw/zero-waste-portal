@@ -1,4 +1,4 @@
-// 前端路由（T05）。四页 + 兜底 404，全部懒加载之外的直接引入（本项目页面少，直接引入更利于排障）。
+// 前端路由（T05）。公众页 + 兜底 404，全部懒加载之外的直接引入（本项目页面少，直接引入更利于排障）。
 //
 // 登录守卫：只保护「详情页下载」那一步，不在路由层拦整页 ——
 // PRD 要求公众可免登录浏览书架与详情，只有下载/（可选）提问才要登录，
@@ -7,6 +7,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { trackPageView } from '../composables/useTracking'
 import HomeView from '../views/HomeView.vue'
+import FoundationView from '../views/FoundationView.vue'
 import ShelfView from '../views/ShelfView.vue'
 import DocDetailView from '../views/DocDetailView.vue'
 import AuthView from '../views/AuthView.vue'
@@ -15,6 +16,12 @@ import NotFoundView from '../views/NotFoundView.vue'
 
 const routes: readonly RouteRecordRaw[] = [
   { path: '/', name: 'home', component: HomeView, meta: { title: '首页' } },
+  {
+    path: '/foundation',
+    name: 'foundation',
+    component: FoundationView,
+    meta: { title: '基金会介绍' },
+  },
   { path: '/shelf', name: 'shelf', component: ShelfView, meta: { title: '资料书架' } },
   { path: '/doc/:id', name: 'doc-detail', component: DocDetailView, meta: { title: '资料详情' } },
   {
