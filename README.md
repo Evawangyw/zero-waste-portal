@@ -24,8 +24,30 @@ npm run dev:frontend            # 前端 http://localhost:5173
 
 ```bash
 curl http://localhost:4000/health     # => {"ok":true}
-curl http://localhost:5173            # => 占位页 HTML（标题「零废弃知识库」）
+curl http://localhost:5173            # => 前端 HTML（标题「零废弃知识库」）
 ```
+
+## 配置
+
+两套库不要混用：
+
+- **WeKnora** 自己的库只给问答引擎用，本仓库不建、不改它。
+- **登录账号和本站业务数据** 放在自建后端的 SQLite：`backend/data/app.db`。
+
+首次在一台机器上跑后端时，先备好 `backend/.env`，再把登录库的表建出来。真实密钥只写进这个文件，不要写进文档。
+
+```bash
+cp deploy/.env.example backend/.env
+# 编辑 backend/.env：
+#   JWT_SECRET            换成随机长串（openssl rand -hex 32）
+#   DB_URL                保持示例里的 file:../data/app.db，即 backend/data/app.db
+#   WEKNORA_*             换成本机 WeKnora 的地址和密钥；没有密钥时登录仍可用，AI 问答不可用
+
+npm run prisma:generate
+npm run prisma:push --workspace backend
+```
+
+`backend/data/` 已在 `.gitignore` 里。换一台机器要重新执行上面的建库步骤；库是空的，需要在页面上重新注册账号。
 
 ## 质量关
 
@@ -53,6 +75,7 @@ zero-waste-portal/
 
 真实密钥**只**写进 `backend/.env`（已 gitignore），结构见 `deploy/.env.example`。
 任何 key / 密码 / token 不得进代码、进 git、进文档。
+`DB_URL` 只指向自建 SQLite，不指向 WeKnora 的数据库。
 
 ## 当前进度
 
