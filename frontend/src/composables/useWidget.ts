@@ -33,6 +33,8 @@ let injectPromise: Promise<EmbedWidgetPublicConfig | null> | null = null
 let scriptElement: HTMLScriptElement | null = null
 /** 挂件事件是否已订阅过（loader 的 on() 是追加式，重复订阅会重复计数） */
 let listenersBound = false
+/** 登出拆掉挂件后递增，用来丢掉还在路上的注入 */
+let mountGeneration = 0
 
 /** 挂件是否已注入过（幂等判据） */
 function alreadyInjected(): boolean {
@@ -49,11 +51,31 @@ function alreadyInjected(): boolean {
  */
 export function mountWidget(): Promise<EmbedWidgetPublicConfig | null> {
   if (injectPromise !== null) return injectPromise
-  injectPromise = doMount()
+  const generation = mountGeneration
+  injectPromise = doMount(generation).then((widget) => {
+    if (generation !== mountGeneration) return null
+    return widget
+  })
   return injectPromise
 }
 
-async function doMount(): Promise<EmbedWidgetPublicConfig | null> {
+/** 登出后拆掉右下角问答挂件。再次登录会重新注入。 */
+export function dismissWidget(): void {
+  mountGeneration += 1
+  window.WeKnora?.close()
+  window.WeKnora?.destroy()
+  scriptElement?.remove()
+  scriptElement = null
+  injectPromise = null
+  listenersBound = false
+  status.value = 'idle'
+  errorMessage.value = ''
+  document.querySelectorAll('script[data-zwp-widget]').forEach((node) => {
+    node.remove()
+  })
+}
+
+async function doMount(generation: number): Promise<EmbedWidgetPublicConfig | null> {
   if (alreadyInjected()) {
     status.value = 'ready'
     return config.value
@@ -61,6 +83,7 @@ async function doMount(): Promise<EmbedWidgetPublicConfig | null> {
   status.value = 'loading'
   try {
     const response = await fetchEmbedConfig()
+    if (generation !== mountGeneration) return null
     const widget = response.widget
     config.value = widget
 
@@ -76,19 +99,26 @@ async function doMount(): Promise<EmbedWidgetPublicConfig | null> {
     script.setAttribute('data-position', widget.position)
     script.setAttribute('data-title', widget.title)
     script.addEventListener('load', () => {
+      if (generation !== mountGeneration) {
+        script.remove()
+        return
+      }
       bindWidgetListeners()
       void probeSessionToken()
       drainAskQueue()
     })
     script.addEventListener('error', () => {
+      if (generation !== mountGeneration) return
       status.value = 'error'
       errorMessage.value = 'AI 助手脚本加载失败（可先用书架搜索）'
     })
 
+    if (generation !== mountGeneration) return null
     document.body.appendChild(script)
     scriptElement = script
     return widget
   } catch (err) {
+    if (generation !== mountGeneration) return null
     status.value = 'error'
     errorMessage.value = err instanceof Error ? err.message : 'AI 助手初始化失败'
     return null

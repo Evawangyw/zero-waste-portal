@@ -221,7 +221,7 @@ function errorFor(field: string): string {
   <div class="auth-page">
     <el-card shadow="never" class="auth-card">
       <h1 class="auth-title">登录 / 注册</h1>
-      <p class="auth-sub">浏览书架与 AI 提问都无需登录；<strong>下载资料需要登录</strong>。</p>
+      <p class="auth-sub">登录后可以查看资料书架，并向 AI 提问。</p>
 
       <el-tabs v-model="activeTab">
         <!-- ------------------------------------------------------ 登录 -->
