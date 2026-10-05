@@ -23,8 +23,9 @@ onMounted(() => {
     <el-main class="app-main">
       <router-view />
     </el-main>
-    <el-footer class="app-footer">
+    <el-footer class="app-footer" height="auto">
       <span>{{ APP_NAME }} · 资料仅供公众参考，具体执行以官方文件为准</span>
+      <router-link class="footer-link" to="/foundation">基金会介绍</router-link>
     </el-footer>
   </el-container>
 </template>
@@ -42,9 +43,20 @@ onMounted(() => {
 }
 
 .app-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 16px;
   text-align: center;
   color: var(--el-text-color-secondary);
   font-size: 13px;
   border-top: 1px solid var(--el-border-color-lighter);
+  padding: 16px;
+}
+
+.footer-link {
+  color: var(--el-color-primary);
+  text-decoration: none;
 }
 </style>

@@ -37,13 +37,14 @@ void authToken
 </script>
 
 <template>
-  <el-header class="site-nav" height="60px">
+  <el-header class="site-nav" height="auto">
     <div class="nav-left">
       <router-link to="/" class="brand">
         {{ APP_NAME }}
       </router-link>
       <nav class="nav-links">
         <router-link to="/" :class="{ active: isActive('/') }">首页</router-link>
+        <router-link to="/foundation" :class="{ active: isActive('/foundation') }">基金会</router-link>
         <router-link to="/shelf" :class="{ active: isActive('/shelf') }">资料书架</router-link>
         <router-link v-if="isAdmin" to="/admin/stats" :class="{ active: isActive('/admin/stats') }">
           管理统计
@@ -62,29 +63,40 @@ void authToken
 </template>
 
 <style scoped>
-.site-nav {
+.site-nav.el-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 60px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--el-border-color-light);
   background: #fff;
+  --el-header-height: auto;
 }
 
 .nav-left {
   display: flex;
   align-items: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  min-width: 0;
 }
 
 .brand {
+  flex: none;
   font-size: 18px;
   font-weight: 700;
   color: var(--el-color-primary);
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .nav-links {
   display: flex;
+  flex: none;
   gap: 16px;
 }
 
@@ -93,6 +105,7 @@ void authToken
   text-decoration: none;
   padding: 4px 0;
   border-bottom: 2px solid transparent;
+  white-space: nowrap;
 }
 
 .nav-links a.active {
@@ -103,6 +116,7 @@ void authToken
 .nav-right {
   display: flex;
   align-items: center;
+  flex: none;
   gap: 12px;
 }
 
