@@ -1,10 +1,9 @@
 // 前端路由（T05）。公众页 + 兜底 404，全部懒加载之外的直接引入（本项目页面少，直接引入更利于排障）。
 //
-// 登录守卫：只保护「详情页下载」那一步，不在路由层拦整页 ——
-// PRD 要求公众可免登录浏览书架与详情，只有下载/（可选）提问才要登录，
-// 所以下载按钮内部跳登录并带 redirect 回跳，路由守卫保持轻。
+// 登录守卫：书架和资料详情需要登录。未登录访问会去登录页，并带 redirect 回来。
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { restoreAuth } from '../composables/useAuth'
 import { trackPageView } from '../composables/useTracking'
 import HomeView from '../views/HomeView.vue'
 import FoundationView from '../views/FoundationView.vue'
@@ -22,8 +21,18 @@ const routes: readonly RouteRecordRaw[] = [
     component: FoundationView,
     meta: { title: '基金会介绍' },
   },
-  { path: '/shelf', name: 'shelf', component: ShelfView, meta: { title: '资料书架' } },
-  { path: '/doc/:id', name: 'doc-detail', component: DocDetailView, meta: { title: '资料详情' } },
+  {
+    path: '/shelf',
+    name: 'shelf',
+    component: ShelfView,
+    meta: { title: '资料书架', requiresAuth: true },
+  },
+  {
+    path: '/doc/:id',
+    name: 'doc-detail',
+    component: DocDetailView,
+    meta: { title: '资料详情', requiresAuth: true },
+  },
   {
     path: '/auth',
     name: 'auth',
@@ -53,6 +62,13 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [...routes],
   scrollBehavior: () => ({ top: 0 }),
+})
+
+router.beforeEach(async (to) => {
+  if (to.meta['requiresAuth'] !== true) return true
+  const loggedIn = await restoreAuth()
+  if (loggedIn) return true
+  return { path: '/auth', query: { redirect: to.fullPath } }
 })
 
 router.afterEach((to, from) => {

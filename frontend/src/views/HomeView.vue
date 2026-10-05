@@ -3,7 +3,7 @@
 //
 // 挂件按官方「安全模式」接（见 composables/useWidget.ts），本页面不自己写问答 UI。
 // 页面只做两件事：把用户的问题交给挂件（openWithQuery）、把关键词交给书架（路由 query）。
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { SAMPLE_QUESTIONS } from '../constants'
@@ -16,7 +16,8 @@ import {
   widgetQueuedAsks,
   widgetStatus,
 } from '../composables/useWidget'
-import { currentUser } from '../composables/useAuth'
+import { currentUser, isLoggedIn } from '../composables/useAuth'
+import FoundationView from './FoundationView.vue'
 
 const router = useRouter()
 
@@ -30,13 +31,21 @@ const customQuestion = ref('')
 const shelfTotal = ref<number | null>(null)
 
 onMounted(() => {
-  // 官方 loader 就绪后放行排队中的问题（用户在脚本到达前点了示例问题的场景）
+  if (!isLoggedIn.value) return
+  startMemberHome()
+})
+
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) startMemberHome()
+})
+
+function startMemberHome(): void {
   window.setTimeout(() => {
     flushPendingQuery()
   }, 800)
   void mountWidget()
   void loadShelfTotal()
-})
+}
 
 async function loadShelfTotal(): Promise<void> {
   try {
@@ -70,7 +79,8 @@ function onSearch(): void {
 </script>
 
 <template>
-  <div class="home">
+  <FoundationView v-if="!isLoggedIn" />
+  <div v-else class="home">
     <section class="hero">
       <p class="eyebrow">安徽省六尺巷慈善基金会 · 零废弃专栏</p>
       <h1 class="title">零废弃知识库</h1>
@@ -133,9 +143,7 @@ function onSearch(): void {
         </template>
       </p>
 
-      <p v-if="currentUser" class="widget-user">
-        已登录（{{ currentUser.name }}），提问会带上你的身份信息；未登录也可以问。
-      </p>
+      <p v-if="currentUser" class="widget-user">已登录（{{ currentUser.name }}），提问会带上你的身份信息。</p>
     </el-card>
 
     <el-card class="search-card" shadow="never">
@@ -158,7 +166,7 @@ function onSearch(): void {
     </el-card>
 
     <el-row class="entries" :gutter="16">
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12">
         <el-card shadow="hover" class="entry-card">
           <template #header><strong>资料书架</strong></template>
           <p>
@@ -171,40 +179,16 @@ function onSearch(): void {
           </router-link>
         </el-card>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12">
         <el-card shadow="hover" class="entry-card">
           <template #header><strong>AI 助手</strong></template>
-          <p>免登录提问，答案基于库内资料生成；答不出来会明说，不猜。</p>
+          <p>答案基于库内资料生成；答不出来会明说，不猜。</p>
           <el-button size="small" @click="onSampleQuestion(SAMPLE_QUESTIONS[0].text)">
             问一个试试
           </el-button>
         </el-card>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="8">
-        <el-card shadow="hover" class="entry-card">
-          <template #header><strong>注册账号</strong></template>
-          <p>注册后可下载资料，提问时自动带上你的机构与关注议题。</p>
-          <router-link to="/auth">
-            <el-button size="small">去注册</el-button>
-          </router-link>
-        </el-card>
-      </el-col>
     </el-row>
-
-    <el-card class="org-card" shadow="never">
-      <template #header>关于基金会</template>
-      <div class="org-row">
-        <div>
-          <h2 class="subtitle-title">安徽省六尺巷慈善基金会</h2>
-          <p class="tips">
-            本知识库关注的零废弃议题，也是这家基金会官网的工作专栏之一。可以先看机构愿景、工作领域和公开信息。
-          </p>
-        </div>
-        <router-link to="/foundation">
-          <el-button type="primary" plain>查看机构介绍</el-button>
-        </router-link>
-      </div>
-    </el-card>
   </div>
 </template>
 
@@ -293,31 +277,15 @@ function onSearch(): void {
   line-height: 1.7;
 }
 
-.org-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.org-card .tips {
-  margin: 0;
-}
-
 @media (max-width: 640px) {
   .title {
     font-size: 26px;
   }
 
   .custom-ask,
-  .search-row,
-  .org-row {
+  .search-row {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .org-row {
-    align-items: flex-start;
   }
 }
 </style>
