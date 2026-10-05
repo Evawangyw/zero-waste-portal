@@ -499,7 +499,11 @@ watch(
 
 .filter-title {
   margin: 0;
+  padding-left: 10px;
+  border-left: 4px solid var(--zw-green);
+  color: var(--zw-ink);
   font-size: 20px;
+  font-weight: 700;
 }
 
 .filter-row {

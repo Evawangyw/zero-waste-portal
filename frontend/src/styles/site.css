@@ -1,0 +1,60 @@
+/*
+ * 全站视觉：对齐安徽省六尺巷慈善基金会官网（h-col-112 及全站自定义样式）。
+ * 主色 #017c40、导航字色 #333、模块标题条同主色、页脚 #2e3232、内容区白底、无大圆角。
+ */
+
+:root {
+  --zw-green: #017c40;
+  --zw-green-dark: #016333;
+  --zw-ink: #333333;
+  --zw-muted: #4d4d4d;
+  --zw-line: #dedede;
+  --zw-footer: #2e3232;
+  --zw-footer-text: #d5d5d5;
+  --zw-page: #ffffff;
+  --zw-band: #f4faf6;
+  --zw-content: 1200px;
+
+  --el-color-primary: #017c40;
+  --el-color-primary-light-3: #4da379;
+  --el-color-primary-light-5: #80bea0;
+  --el-color-primary-light-7: #b3d8c6;
+  --el-color-primary-light-8: #cce5d9;
+  --el-color-primary-light-9: #e6f2ec;
+  --el-color-primary-dark-2: #016333;
+  --el-border-radius-base: 2px;
+  --el-border-radius-small: 2px;
+  --el-border-radius-round: 2px;
+  --el-font-family: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', sans-serif;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  background: var(--zw-page);
+  color: var(--zw-ink);
+  font-family: var(--el-font-family);
+}
+
+/* 官网模块标题条：绿底、白字、直角 */
+.el-card {
+  --el-card-border-color: var(--zw-line);
+  border-radius: 0;
+  border: 1px solid var(--zw-line);
+}
+
+.el-card__header {
+  background: var(--zw-green);
+  color: #fff;
+  border-bottom: none;
+  padding: 10px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.el-card__header .el-button.is-plain,
+.el-card__header .el-tag {
+  --el-tag-bg-color: #fff;
+}

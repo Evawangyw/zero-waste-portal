@@ -151,15 +151,13 @@ function openExternal(url: string): void {
 }
 
 .hero {
-  padding: 36px 32px 28px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 12px;
-  background: linear-gradient(165deg, #f3f7f4 0%, #ffffff 62%);
+  padding: 28px 0 8px;
+  border-bottom: 1px solid var(--zw-line);
 }
 
 .eyebrow {
   margin: 0 0 10px;
-  color: #2f6f4e;
+  color: var(--zw-green);
   font-size: 13px;
   letter-spacing: 0.14em;
 }
@@ -170,9 +168,21 @@ h1 {
   line-height: 1.3;
 }
 
-h2 {
+.foundation > section > h2 {
+  margin: 0 0 14px;
+  padding: 10px 16px;
+  background: var(--zw-green);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.panel h2 {
   margin: 0 0 8px;
-  font-size: 20px;
+  padding: 0;
+  background: none;
+  color: var(--zw-green);
+  font-size: 18px;
 }
 
 h3 {
@@ -198,7 +208,7 @@ h3 {
   margin: 22px 0 0;
   padding-top: 16px;
   border-top: 1px solid var(--el-border-color-lighter);
-  color: #2f6f4e;
+  color: var(--zw-green);
   font-size: 18px;
   letter-spacing: 0.08em;
 }
@@ -213,7 +223,7 @@ h3 {
 .fact {
   padding: 16px;
   border: 1px solid var(--el-border-color-light);
-  border-radius: 10px;
+  border-radius: 0;
   background: #fff;
 }
 
@@ -263,7 +273,7 @@ h3 {
 .panel {
   padding: 18px 18px 16px;
   border: 1px solid var(--el-border-color-light);
-  border-radius: 10px;
+  border-radius: 0;
   background: #fff;
 }
 
@@ -322,7 +332,7 @@ h3 {
   padding: 0;
   list-style: none;
   border: 1px solid var(--el-border-color-light);
-  border-radius: 10px;
+  border-radius: 0;
   background: #fff;
 }
 
