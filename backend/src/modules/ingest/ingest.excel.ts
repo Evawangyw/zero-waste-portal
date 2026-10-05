@@ -7,8 +7,11 @@ import * as XLSX from 'xlsx'
 import { MappingConfigError } from './ingest.mapping.js'
 import type { IngestMapping, IngestRow } from './ingest.types.js'
 
-/** 多值分隔符：半角/全角逗号、顿号、分号、竖线、斜杠、换行 */
-const MULTI_SPLIT_RE = /[,，、;；|\r\n]+/
+/**
+ * 多值分隔符：半角/全角逗号、顿号、分号、竖线、斜杠、空白/换行。
+ * 与 docs.file.name.ts 的 TOPIC_SPLIT_RE 保持同一口径（书架侧拆出来的 topics 要和这里一致）。
+ */
+const MULTI_SPLIT_RE = /[,，、;；|/\s]+/
 
 /** 一行解析失败（收集起来，最后统一进报告，不中断整批） */
 export interface RowParseError {
@@ -23,12 +26,14 @@ export interface ExcelReadResult {
   readonly headerLine: readonly string[]
 }
 
-export function parseWorkbook(
-  buffer: Uint8Array,
-  mapping: IngestMapping,
-): ExcelReadResult {
+export function parseWorkbook(buffer: Uint8Array, mapping: IngestMapping): ExcelReadResult {
   const workbook = XLSX.read(buffer, { type: 'array' })
-  const sheetName = mapping.sheet !== null ? workbook.SheetNames.includes(mapping.sheet) ? mapping.sheet : null : (workbook.SheetNames[0] ?? null)
+  const sheetName =
+    mapping.sheet !== null
+      ? workbook.SheetNames.includes(mapping.sheet)
+        ? mapping.sheet
+        : null
+      : (workbook.SheetNames[0] ?? null)
   if (sheetName === null) {
     throw new MappingConfigError(
       `找不到工作表（配置 sheet=${String(mapping.sheet)}，实际有：${workbook.SheetNames.join('、') || '无'}）`,
@@ -103,7 +108,9 @@ function buildRow(
 ): IngestRow {
   const fileName = readCell(rawRow, colIndexByName, mapping.fileColumn)
   if (fileName === '') {
-    throw new Error(`第 ${excelRow} 行：文件名为空，无法定位文件（映射列「${mapping.fileColumn}」）`)
+    throw new Error(
+      `第 ${excelRow} 行：文件名为空，无法定位文件（映射列「${mapping.fileColumn}」）`,
+    )
   }
 
   const metadata: Record<string, string> = {}

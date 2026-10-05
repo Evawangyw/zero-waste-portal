@@ -70,9 +70,10 @@ export async function runIngest(options: RunIngestOptions): Promise<RunIngestRes
     mapping,
   )
 
-  const existing = options.dryRun === true
-    ? new Set<string>()
-    : await options.uploader.listExistingFileNames(options.knowledgeBaseId)
+  const existing: Set<string> =
+    options.dryRun === true
+      ? new Set<string>()
+      : new Set(await options.uploader.listExistingFileNames(options.knowledgeBaseId))
 
   const retries = options.retries ?? INGEST_RETRY_TIMES
   const results: IngestRowResult[] = []

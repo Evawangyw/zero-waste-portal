@@ -8,7 +8,7 @@
 //  - 元信息 GET /api/v1/knowledge/:id ; 预览 GET /api/v1/knowledge/:id/preview
 //  - 下载 GET /api/v1/knowledge/:id/download ; 批量 POST .../knowledge/batch-download
 import { DEFAULT_SSE_TIMEOUT_MS, loadWeKnoraConfig } from './config.js'
-import { WeKnoraError } from './errors.js'
+import { snippet, WeKnoraError } from './errors.js'
 import { parseSseStream } from './sse.js'
 import {
   requestFormJson,
@@ -178,7 +178,7 @@ export class WeKnoraClient {
         message: `WeKnora 上传失败：${readString(asRecord(envelope['error']), 'message')}`,
         path,
         retryable: false,
-        responseSnippet: snippetOf(JSON.stringify(envelope)),
+        responseSnippet: snippet(JSON.stringify(envelope)),
       })
     }
     const body = isRecord(envelope['data']) ? envelope['data'] : envelope
@@ -234,7 +234,7 @@ export class WeKnoraClient {
         message: `WeKnora 写入 custom_metadata 失败：${readString(asRecord(envelope['error']), 'message')}`,
         path,
         retryable: false,
-        responseSnippet: snippetOf(JSON.stringify(envelope)),
+        responseSnippet: snippet(JSON.stringify(envelope)),
       })
     }
   }

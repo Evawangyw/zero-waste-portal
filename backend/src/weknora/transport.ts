@@ -174,8 +174,7 @@ async function sendRaw(
   const init: RequestInit = {
     method: spec.method,
     // multipart 绝不能手写 Content-Type：缺了 boundary 上游解不开表单
-    headers:
-      spec.body === undefined ? headers : { ...headers, 'Content-Type': 'application/json' },
+    headers: spec.body === undefined ? headers : { ...headers, 'Content-Type': 'application/json' },
     signal: controller.signal,
   }
   if (spec.body !== undefined) init.body = JSON.stringify(spec.body)

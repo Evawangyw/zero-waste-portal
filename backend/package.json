@@ -18,6 +18,10 @@
     "test:file": "tsx src/modules/docs/docs.file.selftest.ts",
     "test:file:toolarge": "tsx src/modules/docs/docs.file.selftest.tooLarge.ts",
     "test:embed": "tsx src/modules/embed/embed.selftest.ts",
+    "test:ingest": "tsx src/modules/ingest/ingest.selftest.ts",
+    "ingest": "tsx src/modules/ingest/import.cli.ts",
+    "ingest:sample-xlsx": "tsx src/modules/ingest/ingest.sample-xlsx.ts",
+    "ingest:sample-pdf": "tsx src/modules/ingest/ingest.sample-pdf.ts",
     "test:track": "tsx src/modules/track/track.selftest.ts",
     "admin:promote": "tsx src/modules/track/track.admin.cli.ts"
   },

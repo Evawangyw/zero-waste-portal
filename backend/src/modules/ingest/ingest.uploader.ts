@@ -2,7 +2,7 @@
 // 幂等的实现口径：导入前先 listExistingFileNames() 拿库里已有文件名集合，
 // 命中即跳过（不靠上传接口去重 —— 上传接口非幂等，重复调会造重复条目）。
 import { readFile } from 'node:fs/promises'
-import { WeKnoraClient } from '../../weknora/index.js'
+import type { WeKnoraClient } from '../../weknora/index.js'
 import type { IngestUploader, UploadFileParams } from './ingest.types.js'
 
 /** 扩展名 -> Content-Type（WeKnora 靠 Content-Type 判类型，给不对会解析失败） */
@@ -52,22 +52,24 @@ export function createWeKnoraUploader(client: WeKnoraClient): IngestUploader {
     ): Promise<void> {
       await client.updateKnowledgeMetadata(knowledgeId, metadata)
     },
-  },
+  }
 }
 
 /** 把任意异常压成一行可读原因（报告里直接展示，不塞堆栈） */
 export function describeError(err: unknown): string {
   if (err instanceof Error) {
-    const kind = 'kind' in err && typeof (err as { kind?: unknown }).kind === 'string'
-      ? ` [${(err as { kind: string }).kind}]`
-      : ''
-    const status = 'status' in err && typeof (err as { status?: unknown }).status === 'number'
-      ? ` (HTTP ${(err as { status: number }).status})`
-      : ''
-    const snippet = 'responseSnippet' in err ? (err as { responseSnippet?: string }).responseSnippet : undefined
+    const kind =
+      'kind' in err && typeof (err as { kind?: unknown }).kind === 'string'
+        ? ` [${(err as { kind: string }).kind}]`
+        : ''
+    const status =
+      'status' in err && typeof (err as { status?: unknown }).status === 'number'
+        ? ` (HTTP ${(err as { status: number }).status})`
+        : ''
+    const snippet =
+      'responseSnippet' in err ? (err as { responseSnippet?: string }).responseSnippet : undefined
     const tail = snippet !== undefined && snippet !== '' ? ` :: ${snippet.slice(0, 200)}` : ''
     return `${err.name}${kind}${status} ${err.message}${tail}`
   }
   return String(err)
 }
-

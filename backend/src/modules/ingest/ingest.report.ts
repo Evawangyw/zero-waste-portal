@@ -21,9 +21,21 @@ export function renderReportText(report: IngestReport): string {
   )
   lines.push('')
 
-  appendSection(lines, '成功清单', report.results.filter((r) => r.outcome === 'success'))
-  appendSection(lines, '跳过清单（幂等：文件名已存在）', report.results.filter((r) => r.outcome === 'skipped'))
-  appendSection(lines, '失败清单', report.results.filter((r) => r.outcome === 'failed'))
+  appendSection(
+    lines,
+    '成功清单',
+    report.results.filter((r) => r.outcome === 'success'),
+  )
+  appendSection(
+    lines,
+    '跳过清单（幂等：文件名已存在）',
+    report.results.filter((r) => r.outcome === 'skipped'),
+  )
+  appendSection(
+    lines,
+    '失败清单',
+    report.results.filter((r) => r.outcome === 'failed'),
+  )
 
   return `${lines.join('\n')}\n`
 }
@@ -39,14 +51,19 @@ function appendSection(lines: string[], title: string, rows: readonly IngestRowR
   for (const row of rows) {
     const id = row.knowledgeId === '' ? '-' : row.knowledgeId
     const reason = row.reason === '' ? '' : ` ｜ 原因：${row.reason}`
-    lines.push(`- 第 ${row.excelRow} 行 · ${row.fileName} · id=${id} · 尝试 ${row.attempts} 次${reason}`)
+    lines.push(
+      `- 第 ${row.excelRow} 行 · ${row.fileName} · id=${id} · 尝试 ${row.attempts} 次${reason}`,
+    )
     lines.push(`  - custom_metadata：${JSON.stringify(row.metadata)}`)
   }
   lines.push('')
 }
 
 /** 同时落 JSON 与 Markdown（同名不同扩展名），主控既能 cat 又能 jq */
-export async function writeReport(reportPath: string, report: IngestReport): Promise<{
+export async function writeReport(
+  reportPath: string,
+  report: IngestReport,
+): Promise<{
   jsonPath: string
   textPath: string
 }> {

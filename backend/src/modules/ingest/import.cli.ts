@@ -12,12 +12,18 @@ import { INGEST_RETRY_TIMES, runIngest, summarize } from './ingest.run.js'
 import { createWeKnoraUploader } from './ingest.uploader.js'
 import type { IngestCliOptions } from './ingest.types.js'
 
-const DEFAULTS = {
+/** 缺省值显式标成 string，否则 TS 会把字面量推成 'inputs' 这类窄字面量类型，赋值时报错 */
+const DEFAULTS: Readonly<{
+  inputDir: string
+  excelFileName: string
+  mappingFileName: string
+  filesSubDir: string
+}> = {
   inputDir: 'inputs',
   excelFileName: 'metadata.xlsx',
   mappingFileName: 'mapping.json',
   filesSubDir: 'files',
-} as const
+}
 
 export function parseArgs(argv: readonly string[]): IngestCliOptions {
   let knowledgeBaseId = ''
