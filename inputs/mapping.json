@@ -1,5 +1,6 @@
 {
   "_说明": "Excel 列名 -> WeKnora custom_metadata 键 的唯一映射处。真数据列名有出入时只改本文件的 column，代码不动。",
+  "_DATA01补充": "末行 {column:知识发布年份 -> key:年份} 是别名键：书架 docs.shelf.clean.ts 硬编码 META_KEY_YEAR='年份'，而本卡规定的列名是「知识发布年份」，两者对不上会导致书架年份维度全空。加这一行是纯配置动作（同一列可映射多个键），零代码改动；保留「知识发布年份」原键是为了验收标准②的逐字段一致性。",
   "headerRow": 1,
   "sheet": null,
   "fileColumn": "文件名",
@@ -11,6 +12,7 @@
     { "column": "知识发布机构", "key": "知识发布机构", "multiValue": false },
     { "column": "知识发布年份", "key": "知识发布年份", "multiValue": false },
     { "column": "知识类型", "key": "知识类型", "multiValue": false },
-    { "column": "知识领域", "key": "知识领域", "multiValue": true }
+    { "column": "知识领域", "key": "知识领域", "multiValue": true },
+    { "column": "知识发布年份", "key": "年份", "multiValue": false }
   ]
 }
