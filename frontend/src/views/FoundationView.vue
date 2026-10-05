@@ -1,15 +1,15 @@
 <script setup lang="ts">
 // 基金会介绍页：把安徽省六尺巷慈善基金会官网的公开介绍，放到本知识库站点里。
 // 事实来自 frontend/src/content/foundation.ts，页面只负责排版和打开官网链接。
+import { isLoggedIn } from '../composables/useAuth'
 import {
   FOUNDATION_AREAS,
-  FOUNDATION_BOARD,
   FOUNDATION_DIRECTIONS,
   FOUNDATION_FACTS,
   FOUNDATION_HOME,
-  FOUNDATION_NEWS,
   FOUNDATION_PAGES,
   FOUNDATION_TEAM,
+  KNOWLEDGE_BASE_POINTS,
 } from '../content/foundation'
 
 function openExternal(url: string): void {
@@ -37,6 +37,27 @@ function openExternal(url: string): void {
       <p class="motto">六尺归心、礼让自然</p>
     </header>
 
+    <section class="link-band">
+      <h2>和零废弃知识库的关系</h2>
+      <div class="grid-3">
+        <article v-for="point in KNOWLEDGE_BASE_POINTS" :key="point.title" class="panel">
+          <h3>{{ point.title }}</h3>
+          <p>{{ point.summary }}</p>
+        </article>
+      </div>
+      <div class="actions">
+        <router-link v-if="isLoggedIn" to="/">
+          <el-button type="primary">进入知识库</el-button>
+        </router-link>
+        <router-link v-else to="/auth">
+          <el-button type="primary">登录后使用知识库</el-button>
+        </router-link>
+        <el-button plain @click="openExternal('https://www.lcx-foundation.org.cn/h-col-159.html')">
+          查看官网零废弃专栏
+        </el-button>
+      </div>
+    </section>
+
     <dl class="facts">
       <div v-for="fact in FOUNDATION_FACTS" :key="fact.label" class="fact">
         <dt>{{ fact.label }}</dt>
@@ -60,7 +81,7 @@ function openExternal(url: string): void {
     <section>
       <h2>官网工作专栏</h2>
       <p class="section-desc">
-        首页把工作分成五个领域。本知识库收录的零废弃政策与实践资料，对应其中的「零废弃」专栏。
+        官网目前展示五个工作领域。其中「零废弃」就是本知识库在收的那一类资料。
       </p>
       <div class="areas">
         <article v-for="area in FOUNDATION_AREAS" :key="area.title" class="panel area">
@@ -77,39 +98,15 @@ function openExternal(url: string): void {
       </div>
     </section>
 
-    <section class="split">
-      <article class="panel">
-        <h2>理事会和监事会</h2>
-        <ul class="people">
-          <li v-for="person in FOUNDATION_BOARD" :key="person.name + person.role">
-            <strong>{{ person.name }}</strong>
-            <span>{{ person.role }}</span>
-          </li>
-        </ul>
-      </article>
-      <article class="panel">
-        <h2>团队</h2>
-        <ul class="people">
-          <li v-for="person in FOUNDATION_TEAM" :key="person.name + person.role">
-            <strong>{{ person.name }}</strong>
-            <span>{{ person.role }}</span>
-          </li>
-        </ul>
-        <p class="note">职务以官网「理事会和监事会」「团队成员」页面公示为准。</p>
-      </article>
-    </section>
-
-    <section>
-      <h2>官网近期文章</h2>
-      <p class="section-desc">以下三篇是整理本页时，官网首页「最新资讯」展示的文章。</p>
-      <ul class="news">
-        <li v-for="item in FOUNDATION_NEWS" :key="item.href">
-          <el-link :href="item.href" target="_blank" rel="noopener noreferrer">
-            {{ item.title }}
-          </el-link>
-          <time :datetime="item.date">{{ item.date }}</time>
+    <section class="panel team">
+      <h2>团队</h2>
+      <ul class="people">
+        <li v-for="person in FOUNDATION_TEAM" :key="person.name + person.role">
+          <strong>{{ person.name }}</strong>
+          <span>{{ person.role }}</span>
         </li>
       </ul>
+      <p class="note">职务以官网「团队成员」页面公示为准。</p>
     </section>
 
     <section class="panel contact">
@@ -252,10 +249,13 @@ h3 {
 }
 
 .grid-3,
-.areas,
-.split {
+.areas {
   display: grid;
   gap: 12px;
+}
+
+.link-band .actions {
+  margin-top: 16px;
 }
 
 .grid-3 {
@@ -264,10 +264,6 @@ h3 {
 
 .areas {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.split {
-  grid-template-columns: 1.4fr 0.8fr;
 }
 
 .panel {
@@ -300,9 +296,13 @@ h3 {
   color: var(--el-text-color-regular);
 }
 
+.team .people {
+  max-width: 520px;
+}
+
 .people {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px 16px;
   margin: 12px 0 0;
   padding: 0;
@@ -324,34 +324,6 @@ h3 {
 
 .note {
   margin: 12px 0 0;
-  font-size: 13px;
-}
-
-.news {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 0;
-  background: #fff;
-}
-
-.news li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.news li:last-child {
-  border-bottom: 0;
-}
-
-.news time {
-  flex: none;
-  color: var(--el-text-color-secondary);
   font-size: 13px;
 }
 
@@ -385,7 +357,7 @@ h3 {
 @media (max-width: 900px) {
   .facts,
   .grid-3,
-  .split {
+  .people {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -402,14 +374,8 @@ h3 {
   .facts,
   .grid-3,
   .areas,
-  .split,
   .people {
     grid-template-columns: 1fr;
-  }
-
-  .news li {
-    flex-direction: column;
-    gap: 4px;
   }
 }
 </style>
