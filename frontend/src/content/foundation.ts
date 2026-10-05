@@ -1,7 +1,7 @@
 /**
  * 安徽省六尺巷慈善基金会介绍页的公开信息。
- * 文案依据官网 https://www.lcx-foundation.org.cn/ 公开页面整理，不在此发明事实。
- * 职务、地址、资讯标题均对应官网对应栏目；官网改版后以链接落地页为准。
+ * 机构事实依据官网 https://www.lcx-foundation.org.cn/ 公开页面整理。
+ * 本站与基金会的关系按知识库自身的定位来写。
  */
 
 export const FOUNDATION_HOME = 'https://www.lcx-foundation.org.cn/'
@@ -33,10 +33,9 @@ export interface FoundationPerson {
   readonly role: string
 }
 
-export interface FoundationNews {
+export interface KnowledgeBasePoint {
   readonly title: string
-  readonly date: string
-  readonly href: string
+  readonly summary: string
 }
 
 export const FOUNDATION_FACTS: readonly FoundationFact[] = [
@@ -101,17 +100,23 @@ export const FOUNDATION_AREAS: readonly FoundationArea[] = [
   },
 ]
 
-/** 理事会和监事会（官网对应栏目，顺序与页面一致） */
-export const FOUNDATION_BOARD: readonly FoundationPerson[] = [
-  { name: '张正扬', role: '创会理事长' },
-  { name: '田倩', role: '理事长' },
-  { name: '毛达', role: '理事兼秘书长' },
-  { name: '郝利琼', role: '理事' },
-  { name: '江海', role: '理事' },
-  { name: '张军', role: '副理事长' },
-  { name: '赵光', role: '监事长' },
-  { name: '张登高', role: '监事' },
-  { name: '朱贞艳', role: '监事' },
+/** 本知识库和基金会的关系。介绍页以此为主，不展开理事会或官网资讯。 */
+export const KNOWLEDGE_BASE_POINTS: readonly KnowledgeBasePoint[] = [
+  {
+    title: '基金会的公众入口',
+    summary:
+      '零废弃知识库是安徽省六尺巷慈善基金会面向公众的资料与问答站点，用来承接它在废弃物和可持续生活上的公开工作。',
+  },
+  {
+    title: '对应「零废弃」专栏',
+    summary:
+      '基金会官网把零废弃列为工作领域之一。本库收录的是这一领域的政策与实践资料，不另起一套议题。',
+  },
+  {
+    title: '登录后才能使用',
+    summary:
+      '登录后可以按年份、发布机构、知识类型和主题翻书架，也可以向 AI 提问。答案只依据库内资料生成，资料里没有的会直说没有。',
+  },
 ]
 
 /** 团队成员页公开展示的职务 */
@@ -121,28 +126,9 @@ export const FOUNDATION_TEAM: readonly FoundationPerson[] = [
   { name: '黄正', role: '项目助理' },
 ]
 
-/** 抓取官网首页时展示的三则最新资讯 */
-export const FOUNDATION_NEWS: readonly FoundationNews[] = [
-  {
-    title: 'GRS/RCS认证全攻略：中国企业出海的「绿色通行证」怎么拿？',
-    date: '2026-09-01',
-    href: 'https://www.lcx-foundation.org.cn/sys-nd/111.html',
-  },
-  {
-    title: '真实案例拆解——如何从「和AI聊天」到「让AI干活」',
-    date: '2026-08-14',
-    href: 'https://www.lcx-foundation.org.cn/sys-nd/108.html',
-  },
-  {
-    title: '中国「限塑令」五年考：从政策到行动，我们走了多远？',
-    date: '2026-08-07',
-    href: 'https://www.lcx-foundation.org.cn/sys-nd/109.html',
-  },
-]
-
 export const FOUNDATION_PAGES: readonly FoundationLink[] = [
   { label: '机构简介', href: 'https://www.lcx-foundation.org.cn/h-col-112.html' },
-  { label: '理事会和监事会', href: 'https://www.lcx-foundation.org.cn/h-col-111.html' },
+  { label: '零废弃专栏', href: 'https://www.lcx-foundation.org.cn/h-col-159.html' },
   { label: '团队成员', href: 'https://www.lcx-foundation.org.cn/h-col-113.html' },
   { label: '联系我们', href: 'https://www.lcx-foundation.org.cn/h-col-123.html' },
   { label: '信息公开', href: 'https://www.lcx-foundation.org.cn/h-col-103.html' },
