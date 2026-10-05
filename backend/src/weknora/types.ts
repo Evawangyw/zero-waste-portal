@@ -66,6 +66,33 @@ export interface ListKnowledgeResult {
   readonly success: boolean
 }
 
+/** 上传文件入参（T09-lite 批量导入用） */
+export interface UploadFileParams {
+  /** 目标知识库 ID */
+  readonly knowledgeBaseId: string
+  /** 落库文件名（含扩展名，上传以此为准） */
+  readonly fileName: string
+  /** 文件原始字节（调用方读文件，传输层只管发） */
+  readonly fileBytes: Uint8Array
+  /** Content-Type；.pdf/.docx 等按扩展名推断 */
+  readonly contentType: string
+  /** 随上传一起写的 metadata（值必须为标量字符串，见 uploadFile 注释） */
+  readonly metadata: Readonly<Record<string, string>>
+  /** 可选标题（WeKnora 缺省拿文件名当 title） */
+  readonly title?: string | undefined
+  /** 上传超时覆盖（默认 120s） */
+  readonly timeoutMs?: number | undefined
+}
+
+/** 上传结果（T09-lite） */
+export interface UploadFileResult {
+  readonly id: string
+  /** 上游解析状态：pending/failed/done 等；解析失败不影响条目与元数据落库 */
+  readonly parseStatus: string
+  /** 上传时随 metadata 字段落下的内容（注意：不是 custom_metadata） */
+  readonly metadata: Readonly<Record<string, unknown>>
+}
+
 /** 会话（POST /api/v1/sessions 返回 201） */
 export interface WeKnoraSession {
   readonly id: string

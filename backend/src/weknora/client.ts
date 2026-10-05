@@ -10,13 +10,21 @@
 import { DEFAULT_SSE_TIMEOUT_MS, loadWeKnoraConfig } from './config.js'
 import { WeKnoraError } from './errors.js'
 import { parseSseStream } from './sse.js'
-import { requestJson, requestStream, requestText, type TransportOptions } from './transport.js'
+import {
+  requestFormJson,
+  requestJson,
+  requestStream,
+  requestText,
+  type TransportOptions,
+} from './transport.js'
 import type {
   AskEvent,
   AskKnowledgeParams,
   BatchDownloadResult,
   ListKnowledgeParams,
   ListKnowledgeResult,
+  UploadFileParams,
+  UploadFileResult,
   WeKnoraBinary,
   WeKnoraConfig,
   WeKnoraKnowledge,
@@ -130,6 +138,116 @@ export class WeKnoraClient {
     // 上游统一包一层 data；缺失时视为裸对象
     const body = isRecord(envelope['data']) ? envelope['data'] : envelope
     return toKnowledge(body)
+  }
+
+  // ---------------------------------------------------------------- 写入（T09-lite）
+
+  /**
+   * 方法 8：上传单个文件（multipart/form-data）。
+   * 环境事实（本机实测，非文档抄写）：
+   *  - 路由 POST /api/v1/knowledge-bases/:kbId/knowledge/file
+   *  - 文件字段名固定 `file`；同请求可带 `metadata`（JSON 串），落到 knowledge.metadata
+   *  - metadata 的值必须是**标量字符串**：传数组/对象上游报
+   *    "Invalid metadata format / cannot unmarshal array into Go value of type string"
+   *  - 上传非幂等，故这里不自动重试（重试责任在调用方）
+   *  - 文件内容非文本（如随手造的假 PDF）时 parse_status 会是 failed，
+   *    但知识条目与 metadata 都已落库，不影响导入结果
+   * @returns 新建 knowledge 的 id
+   */
+  async uploadFile(params: UploadFileParams): Promise<UploadFileResult> {
+    const path = `/api/v1/knowledge-bases/${encodeURIComponent(params.knowledgeBaseId)}/knowledge/file`
+    const form = new FormData()
+    form.append('file', new Blob([params.fileBytes], { type: params.contentType }), params.fileName)
+    // 空 metadata 不发这个字段，避免上游对空 JSON 串做无意义解析
+    if (Object.keys(params.metadata).length > 0) {
+      form.append('metadata', JSON.stringify(params.metadata))
+    }
+    if (params.title !== undefined) form.append('title', params.title)
+
+    const payload = await requestFormJson(this.transport, {
+      method: 'POST',
+      path,
+      form,
+      // 20MB 级文件 + 上游落盘，给足 120s（默认 15s 会砍断大文件）
+      timeoutMs: params.timeoutMs ?? 120_000,
+    })
+    const envelope = asRecord(payload)
+    if (envelope['success'] === false) {
+      throw new WeKnoraError({
+        kind: 'client_error',
+        message: `WeKnora 上传失败：${readString(asRecord(envelope['error']), 'message')}`,
+        path,
+        retryable: false,
+        responseSnippet: snippetOf(JSON.stringify(envelope)),
+      })
+    }
+    const body = isRecord(envelope['data']) ? envelope['data'] : envelope
+    const id = readString(body, 'id')
+    if (id === '') {
+      throw new WeKnoraError({
+        kind: 'parse_error',
+        message: 'WeKnora 上传成功但未返回 knowledge id',
+        path,
+        retryable: false,
+      })
+    }
+    return {
+      id,
+      parseStatus: readString(body, 'parse_status'),
+      metadata: asRecord(body['metadata']),
+    }
+  }
+
+  /**
+   * 方法 9：更新单条 knowledge（PUT /api/v1/knowledge/:id）。
+   *
+   * ⚠️ 为什么上传后还要补这一次 PUT（本机实测，任务卡「文件+元数据一次写入」的落地细节）：
+   *  multipart 的 `metadata` 字段落在 knowledge.**metadata**，
+   *  而书架/详情读的是 knowledge.**custom_metadata** —— 两者不是一回事。
+   *  实测传 `custom_metadata` 作为 multipart 字段一律被忽略（读回仍是 {}）。
+   *  所以：上传时先带 metadata（让标题/描述等侧信息尽量完整），
+   *  再用本次 PUT 把 custom_metadata 真正写进去。
+   *
+   * ⚠️ custom_metadata 的值只接受 string/number/boolean/null；
+   *  传数组或嵌套对象上游返回 500
+   *  「custom_metadata field "X" must be a string, number, boolean, or null」。
+   *  故调用方必须先把多值字段 join 成字符串。
+   */
+  async updateKnowledgeMetadata(
+    knowledgeId: string,
+    customMetadata: Readonly<Record<string, string>>,
+    title?: string,
+  ): Promise<void> {
+    const path = `/api/v1/knowledge/${encodeURIComponent(knowledgeId)}`
+    const payload = await requestJson(this.transport, {
+      method: 'PUT',
+      path,
+      body: {
+        custom_metadata: customMetadata,
+        ...(title !== undefined ? { title } : {}),
+      },
+    })
+    const envelope = asRecord(payload)
+    if (envelope['success'] === false) {
+      throw new WeKnoraError({
+        kind: 'client_error',
+        message: `WeKnora 写入 custom_metadata 失败：${readString(asRecord(envelope['error']), 'message')}`,
+        path,
+        retryable: false,
+        responseSnippet: snippetOf(JSON.stringify(envelope)),
+      })
+    }
+  }
+
+  /** 方法 10：按文件名批量查库里已存在的文件名（小写归一，幂等判断用） */
+  async listExistingFileNames(knowledgeBaseId: string): Promise<ReadonlySet<string>> {
+    const items = await this.listAllKnowledge({ knowledgeBaseId })
+    const out = new Set<string>()
+    for (const item of items) {
+      const name = item.fileName.trim()
+      if (name !== '') out.add(name.toLowerCase())
+    }
+    return out
   }
 
   // ---------------------------------------------------------------- 二进制

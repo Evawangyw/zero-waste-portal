@@ -14,6 +14,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // Cloudflare 快速隧道（演示用）需要放行其动态域名，否则公网访问 403
+    allowedHosts: ['.trycloudflare.com'],
     // /api 反代到自建后端：前端代码里只写相对路径 /api/**，换环境不改代码。
     //
     // changeOrigin 必须保持 false（http-proxy 默认值）：保持 false 时转发给后端的 Host

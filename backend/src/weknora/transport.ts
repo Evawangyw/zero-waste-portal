@@ -14,11 +14,17 @@ export interface TransportOptions {
 }
 
 export interface RequestSpec {
-  readonly method: 'GET' | 'POST'
+  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   readonly path: string
   readonly query?: Readonly<Record<string, string | number | undefined>> | undefined
   readonly body?: unknown
-  /** 覆盖默认超时（下载大文件用） */
+  /**
+   * multipart/form-data 请求体（T09-lite 文件上传用）。
+   * 与 body 互斥：给 form 时不设 Content-Type，让 fetch 自己带 multipart 边界。
+   * ⚠️ FormData 不可复用（body 是流），重试前必须由调用方重新构造。
+   */
+  readonly form?: FormData | undefined
+  /** 覆盖默认超时（下载/上传大文件用） */
   readonly timeoutMs?: number | undefined
   /** 外部取消信号（如客户端断开） */
   readonly signal?: AbortSignal | undefined
@@ -83,6 +89,20 @@ export async function requestStream(
 }
 
 /**
+ * 发一个 multipart/form-data 请求（T09-lite 文件上传）。
+ * 仍走 sendRaw 的统一超时/错误分类，但**不自动重试**（上传非幂等，重试会造重复知识，
+ * 幂等由 ingest 模块按文件名先查后写来保证）。
+ */
+export async function requestFormJson(
+  transport: TransportOptions,
+  spec: RequestSpec,
+): Promise<unknown> {
+  const { response, path } = await sendRaw(transport, spec, false)
+  const text = await readBodyText(response, path)
+  return parseJsonSafe(text, path)
+}
+
+/**
  * 核心发送逻辑：带 AbortController 超时 + GET 幂等重试。
  * retries 仅在 idempotent=true 时生效（任务卡：GET 重试 2 次）。
  */
@@ -142,12 +162,24 @@ async function sendRaw(
   }
 
   const headers = authHeaders(transport.apiKey)
+  const useForm = spec.form !== undefined
+  if (useForm && spec.body !== undefined) {
+    throw new WeKnoraError({
+      kind: 'client_error',
+      message: 'RequestSpec.form 与 body 不能同时给（multipart 边界必须由 fetch 生成）',
+      path: spec.path,
+      retryable: false,
+    })
+  }
   const init: RequestInit = {
     method: spec.method,
-    headers: spec.body === undefined ? headers : { ...headers, 'Content-Type': 'application/json' },
+    // multipart 绝不能手写 Content-Type：缺了 boundary 上游解不开表单
+    headers:
+      spec.body === undefined ? headers : { ...headers, 'Content-Type': 'application/json' },
     signal: controller.signal,
   }
   if (spec.body !== undefined) init.body = JSON.stringify(spec.body)
+  else if (useForm && spec.form !== undefined) init.body = spec.form
 
   try {
     const response = await fetch(url, init)

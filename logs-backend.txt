@@ -1,0 +1,1 @@
+[zero-waste-backend] listening on http://localhost:4000 (env=development)
