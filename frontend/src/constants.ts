@@ -1,5 +1,5 @@
 // 前端全局常量（PRD 口径的唯一出处，改文案只改这里）
-import type { ShelfSort } from './api/types'
+import type { ShelfSort, TrackEventName } from './api/types'
 
 /** localStorage 里放 JWT 的键名 */
 export const TOKEN_STORAGE_KEY = 'zwp.auth.token'
@@ -34,6 +34,26 @@ export const SAMPLE_QUESTIONS: readonly SampleQuestion[] = [
 
 /** 书架每页条数（后端默认 20，这里显式传，保证分页条数与后端上限一致） */
 export const SHELF_PAGE_SIZE = 20
+
+/**
+ * 7 类埋点事件的中文标签与展示顺序（T08lite）。
+ * key 必须与后端 track.types.ts 的 TRACK_EVENTS 完全一致，顺序即表格行序（后端对象键序不保证）。
+ */
+export const TRACK_EVENT_LABELS: readonly {
+  readonly key: TrackEventName
+  readonly label: string
+}[] = [
+  { key: 'page_view', label: '页面浏览 page_view' },
+  { key: 'search', label: '检索 search' },
+  { key: 'preview', label: '预览 preview' },
+  { key: 'download', label: '下载 download' },
+  { key: 'ai_ask', label: 'AI 提问 ai_ask' },
+  { key: 'register', label: '注册 register' },
+  { key: 'feedback_submit', label: '反馈提交 feedback_submit' },
+]
+
+/** 管理统计页自动刷新间隔：5 分钟（T08lite 卡片口径，二选一里我选了自动刷新 + 手动按钮都给） */
+export const ADMIN_STATS_REFRESH_MS = 5 * 60 * 1000
 
 /** 书架默认排序（后端 year_desc） */
 export const DEFAULT_SHELF_SORT: ShelfSort = 'year_desc'

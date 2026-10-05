@@ -10,6 +10,7 @@ import HomeView from '../views/HomeView.vue'
 import ShelfView from '../views/ShelfView.vue'
 import DocDetailView from '../views/DocDetailView.vue'
 import AuthView from '../views/AuthView.vue'
+import AdminStatsView from '../views/AdminStatsView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 
 const routes: readonly RouteRecordRaw[] = [
@@ -23,6 +24,15 @@ const routes: readonly RouteRecordRaw[] = [
     meta: { title: '登录 / 注册' },
     // 支持 /auth?redirect=/doc/xxx：登录后回跳原页面（详情页下载未登录时用）
     props: true,
+  },
+  {
+    // T08lite 管理统计最简页。meta.requiresAdmin 只是**声明式标记**：
+    // 本页不在路由层放守卫 —— 卡片要求非管理员访问时「看到权限提示页」而不是被重定向，
+    // 所以权限判定放在 AdminStatsView 内部（校验中/未登录/非管理员 三态各自提示）。
+    path: '/admin/stats',
+    name: 'admin-stats',
+    component: AdminStatsView,
+    meta: { title: '管理统计', requiresAdmin: true },
   },
   {
     path: '/:pathMatch(.*)*',

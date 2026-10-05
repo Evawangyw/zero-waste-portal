@@ -13,6 +13,9 @@ const router = useRouter()
 const nickname = computed(() => currentUser.value?.name ?? '')
 const activePath = computed(() => route.path)
 
+/** T08lite：管理统计入口只对管理员露出（普通用户连链接都看不到），判定依据是 /me 返回的 isAdmin */
+const isAdmin = computed(() => currentUser.value?.isAdmin === true)
+
 function onLogout(): void {
   clearAuth()
   ElMessage.success('已退出登录')
@@ -42,6 +45,9 @@ void authToken
       <nav class="nav-links">
         <router-link to="/" :class="{ active: isActive('/') }">首页</router-link>
         <router-link to="/shelf" :class="{ active: isActive('/shelf') }">资料书架</router-link>
+        <router-link v-if="isAdmin" to="/admin/stats" :class="{ active: isActive('/admin/stats') }">
+          管理统计
+        </router-link>
       </nav>
     </div>
 
