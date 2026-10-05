@@ -1,0 +1,16 @@
+{
+  "_说明": "Excel 列名 -> WeKnora custom_metadata 键 的唯一映射处。真数据列名有出入时只改本文件的 column，代码不动。",
+  "headerRow": 1,
+  "sheet": null,
+  "fileColumn": "文件名",
+  "emptyValue": "未标注",
+  "multiValueJoiner": "、",
+  "fields": [
+    { "column": "文件名", "key": "文件名", "multiValue": false },
+    { "column": "知识名", "key": "知识名", "multiValue": false },
+    { "column": "知识发布机构", "key": "知识发布机构", "multiValue": false },
+    { "column": "知识发布年份", "key": "知识发布年份", "multiValue": false },
+    { "column": "知识类型", "key": "知识类型", "multiValue": false },
+    { "column": "知识领域", "key": "知识领域", "multiValue": true }
+  ]
+}

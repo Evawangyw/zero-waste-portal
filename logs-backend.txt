@@ -1,1 +1,92 @@
 [zero-waste-backend] listening on http://localhost:4000 (env=development)
+15:43:42 [tsx] change in ./src\weknora\transport.ts Restarting...
+[zero-waste-backend] listening on http://localhost:4000 (env=development)
+15:43:56 [tsx] change in ./src\weknora\transport.ts Restarting...
+[zero-waste-backend] listening on http://localhost:4000 (env=development)
+15:44:03 [tsx] change in ./src\weknora\transport.ts Restarting...
+[zero-waste-backend] listening on http://localhost:4000 (env=development)
+15:44:16 [tsx] change in ./src\weknora\client.ts Restarting...
+node:events:486
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at Server.listen (node:net:2110:7)
+    at app.listen (E:\projects\zero-waste-portal\node_modules\express\lib\application.js:635:24)
+    at <anonymous> (E:\projects\zero-waste-portal\backend\src\index.ts:9:5)
+    at Object.<anonymous> (E:\projects\zero-waste-portal\backend\src\index.ts:13:2)
+    at Module._compile (node:internal/modules/cjs/loader:1812:14)
+    at Object.transformer (E:\projects\zero-waste-portal\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1533:32)
+    at Module._load (node:internal/modules/cjs/loader:1335:12)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1984:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v24.14.0
+15:44:34 [tsx] change in ./src\weknora\client.ts Rerunning...
+[zero-waste-backend] listening on http://localhost:4000 (env=development)
+15:44:41 [tsx] change in ./src\weknora\client.ts Restarting...
+node:events:486
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at Server.listen (node:net:2110:7)
+    at app.listen (E:\projects\zero-waste-portal\node_modules\express\lib\application.js:635:24)
+    at <anonymous> (E:\projects\zero-waste-portal\backend\src\index.ts:9:5)
+    at Object.<anonymous> (E:\projects\zero-waste-portal\backend\src\index.ts:13:2)
+    at Module._compile (node:internal/modules/cjs/loader:1812:14)
+    at Object.transformer (E:\projects\zero-waste-portal\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1533:32)
+    at Module._load (node:internal/modules/cjs/loader:1335:12)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1984:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v24.14.0
+15:45:03 [tsx] change in ./src\weknora\index.ts Rerunning...
+[zero-waste-backend] listening on http://localhost:4000 (env=development)
+15:45:08 [tsx] change in ./src\weknora\index.ts Restarting...
+node:events:486
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at Server.listen (node:net:2110:7)
+    at app.listen (E:\projects\zero-waste-portal\node_modules\express\lib\application.js:635:24)
+    at <anonymous> (E:\projects\zero-waste-portal\backend\src\index.ts:9:5)
+    at Object.<anonymous> (E:\projects\zero-waste-portal\backend\src\index.ts:13:2)
+    at Module._compile (node:internal/modules/cjs/loader:1812:14)
+    at Object.transformer (E:\projects\zero-waste-portal\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1533:32)
+    at Module._load (node:internal/modules/cjs/loader:1335:12)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1984:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v24.14.0

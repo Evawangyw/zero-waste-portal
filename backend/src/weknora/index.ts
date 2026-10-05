@@ -13,6 +13,7 @@ export {
   resolveEnvFilePath,
 } from './config.js'
 export { parseSseStream, isTerminalEvent } from './sse.js'
+export { requestFormJson } from './transport.js'
 export { syncIndex } from './sync-index.js'
 export type {
   KnowledgeIndexRow,
@@ -27,6 +28,8 @@ export type {
   ListKnowledgeParams,
   ListKnowledgeResult,
   WeKnoraBinary,
+  UploadFileParams,
+  UploadFileResult,
   WeKnoraConfig,
   WeKnoraErrorInit,
   WeKnoraErrorKind,

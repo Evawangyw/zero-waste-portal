@@ -85,10 +85,16 @@ export interface IngestCliOptions {
   readonly inputDir: string
   /** 报告落盘路径（相对 inputDir 或绝对路径） */
   readonly reportPath: string
-  /** 只读演练：不真上传，只打印将要做什么 */
+  /** Excel 文件名（相对 inputDir） */
+  readonly excelFileName: string
+  /** 映射配置文件名（相对 inputDir） */
+  readonly mappingFileName: string
+  /** 文件子目录（相对 inputDir） */
+  readonly filesSubDir: string
+  /** 只读演练：不真上传，报告里全标 skipped/dry-run */
   readonly dryRun: boolean
-  /** 忽略重试，一次失败即记 failed */
-  readonly noRetry: boolean
+  /** 失败重试次数（0 = 不重试） */
+  readonly retries: number
 }
 
 /** 上传所需的最小依赖（便于单测注入假实现，不碰网络） */
