@@ -91,42 +91,13 @@ function respondTrackError(
 // ------------------------------------------------------------------ 兜底错误体
 
 /**
- * 只为 /api/track 兜住「body-parser 在进路由之前就报错」的情况（畸形 JSON、
- * strict 模式下把 `"hello"` / `123` 这类原始值判为非法）。
- * 不处理的话这些请求会拿到 Express 默认的 HTML 错误页，与本模块的 JSON 契约不一致。
+ * 「body-parser 在进路由之前就报错」的情况（畸形 JSON、strict 模式下把 `"hello"` / `123`
+ * 这类原始值判为非法）由**全局** jsonErrorHandler 兜住（见 src/middleware/json-error.handler.ts）。
  *
- * 严格限定路径：非 /api/track 一律 next(err) 交还原默认处理，
- * 保证 T02/T03/T04/T05T06 既有路由的报错行为**一个字节都不变**。
- * 注册位置必须在 createApp 末尾（错误中间件只能抓到它之前抛出的错误）。
+ * QA-01 P1-3 之前这里有个只拦 /api/track 的 trackJsonErrorHandler；那张修单把同一套信封
+ * 提到了 app.ts 全局，本函数被它完整覆盖，故删除以免两份实现漂移。
+ * 信封的 code / message / issues 结构保持不变，T07 契约行为不变。
  */
-export function trackJsonErrorHandler(
-  err: unknown,
-  req: Request,
-  res: Response,
-  next: (err?: unknown) => void,
-): void {
-  if (!req.originalUrl.startsWith('/api/track')) {
-    next(err)
-    return
-  }
-  if (res.headersSent) {
-    next(err)
-    return
-  }
-  const isBodyParseError = err instanceof Error && err.name === 'SyntaxError'
-  const isTooLarge = err instanceof Error && 'type' in err && err.type === 'entity.too.large'
-  respondTrackError(
-    res,
-    isTooLarge ? 413 : 400,
-    'VALIDATION_FAILED',
-    isTooLarge
-      ? '请求体超过 1MB 上限，请分批发送'
-      : isBodyParseError
-        ? '请求体不是合法 JSON'
-        : '请求体无法解析',
-    [],
-  )
-}
 
 // ------------------------------------------------------------------ GET /api/admin/stats/summary
 

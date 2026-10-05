@@ -344,6 +344,32 @@ async function testHttp(): Promise<void> {
       `HTTP ${malformed.status} ${malformedText.slice(0, 160)}`,
     )
 
+    // ---- ②b 畸形 JSON 打**任意** API 都返回统一 JSON 信封（QA-01 P1-3）
+    // 原来只有 /api/track 挂了 JSON 兜底，其余接口（如 /api/auth/register）
+    // 会拿到 Express 默认的 400 HTML 错误页，并把解析器报错原文吐给客户端。
+    for (const target of ['/api/auth/register', '/api/docs', '/api/embed/token']) {
+      const r = await fetch(`${base}${target}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{oops',
+      })
+      const text = await r.text()
+      const isJson = text.trimStart().startsWith('{')
+      const env = parseJson(text)
+      const err = readRecord(env, 'error')
+      check(
+        `畸形 JSON 打 ${target} -> 400 + 统一 JSON 信封（无 HTML）`,
+        r.status === 400 && isJson && env['success'] === false && err['code'] !== undefined,
+        `HTTP ${r.status} ${text.slice(0, 160)}`,
+      )
+      // 不泄露内部报错原文
+      check(
+        `${target} 的错误体不含内部解析器报错`,
+        !text.includes('SyntaxError') && !text.includes('in JSON') && !text.includes('<pre>'),
+        text.slice(0, 160),
+      )
+    }
+
     // ---- ③ 统计口径自检（用 ADMIN_STATS_TOKEN；未配置则跳过并提示）
     const token = loadTrackAdminConfig().adminToken
     if (token === null) {

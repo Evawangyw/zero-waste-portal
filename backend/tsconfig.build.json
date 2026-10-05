@@ -9,5 +9,8 @@
     "verbatimModuleSyntax": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  // selftest.* 是开发期自测脚本（只用 npx tsx 跑，从不进 dist），它们用了 import.meta；
+  // 而 package.json 未声明 type:module，tsc 会按 CJS 输出并拒绝 import.meta（TS1470），
+  // 导致 `npm run build` 挂掉。自测不参与产物，故排除。
+  "exclude": ["node_modules", "dist", "src/**/*.selftest.ts", "src/**/*.selftest.tooLarge.ts"]
 }

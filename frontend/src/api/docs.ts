@@ -41,6 +41,15 @@ export function fetchFacets(): Promise<ShelfFacetsResponse> {
   return request<ShelfFacetsResponse>('/docs/facets')
 }
 
+/**
+ * 书架总条数（P2-5：首页「共 N 条」原来硬编码 42，数据一变就失配）。
+ * 用 pageSize=1 只取 total，不浪费带宽也不受分页影响。
+ */
+export async function fetchShelfTotal(): Promise<number> {
+  const response = await fetchShelf({ page: 1, pageSize: 1 })
+  return response.total
+}
+
 /** GET /api/docs/:id —— 详情（元数据 + 摘要 + 预览/下载可用性） */
 export function fetchDocDetail(id: string): Promise<DocDetailResponse> {
   return request<DocDetailResponse>(`/docs/${encodeURIComponent(id)}`)

@@ -27,8 +27,17 @@ import {
 /** LIKE 模式里需要转义的三个字符（配 ESCAPE '\' 使用） */
 const LIKE_ESCAPE_RE = /[\\%_]/g
 
-/** 主题维度存在 JSON 数组串里，用带引号的精确元素匹配：topics LIKE '%"塑料污染"%' */
-const TAG_LIKE_TEMPLATE = '%"' + '{value}' + '"%'
+/** 空主题单元格的字面量（"未标注" 哨兵翻译成"topics 为空数组"） */
+const EMPTY_TOPICS_CELL = '[]'
+
+/**
+ * 主题匹配模式：`%<带引号的主题>%`。
+ * 库里的 topics 是 JSON 数组串（如 `["测试领域"]`），所以必须**带双引号**做元素级匹配，
+ * 否则 `塑料` 会误命中 `["塑料污染"]`。
+ * {value} 必须是「已带双引号」的 JSON 字符串字面量 —— 由 tagLikePattern() 用
+ * JSON.stringify 生成，主题里含引号/反斜杠时也能对上真实存储格式。
+ */
+const TAG_LIKE_TEMPLATE = '%{value}%'
 
 /** 书架列表查询 */
 export async function queryShelf(
@@ -131,8 +140,8 @@ function buildWhere(query: ShelfQuery): Prisma.Sql {
   if (query.tags.length > 0) {
     const tagClauses = query.tags.map((tag) =>
       tag === MISSING_LABEL
-        ? Prisma.sql`"topics" = ${'[]'}`
-        : Prisma.sql`"topics" LIKE ${escapeLike(TAG_LIKE_TEMPLATE.replace('{value}', tag))} ESCAPE '\\'`,
+        ? Prisma.sql`"topics" = ${EMPTY_TOPICS_CELL}`
+        : Prisma.sql`"topics" LIKE ${tagLikePattern(tag)} ESCAPE '\\'`,
     )
     conditions.push(Prisma.sql`(${Prisma.join(tagClauses, ' OR ')})`)
   }
@@ -175,6 +184,20 @@ function pushScalarFilter(
 /** LIKE 转义：用户搜 "%" 不该变成通配符 */
 function escapeLike(value: string): string {
   return value.replace(LIKE_ESCAPE_RE, (ch) => `\\${ch}`)
+}
+
+/**
+ * 主题维度的 LIKE 模式。
+ *
+ * 关键：转义**只作用于用户给的主题值**，模板首尾那两个 `%` 必须原样留给 LIKE 当通配符。
+ * 之前的写法把整个拼好的模式丢进 escapeLike()，于是 `%` 被转义成 `\%`，
+ * 配 ESCAPE '\' 之后整个模式退化成字面量匹配 —— 库里明明存着 `["测试领域"]`，
+ * `?tag=测试领域` 却永远 0 条（QA-01 P0-1）。这正是"存的是带引号 JSON"这个假设本身没错、
+ * 错在转义层级的原因。
+ */
+function tagLikePattern(tag: string): string {
+  // JSON.stringify 自带首尾双引号，正好对上 ["主题"] 的元素边界
+  return TAG_LIKE_TEMPLATE.replace('{value}', escapeLike(JSON.stringify(tag)))
 }
 
 // ------------------------------------------------------------------ ORDER BY

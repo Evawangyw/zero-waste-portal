@@ -3,6 +3,8 @@
 //   GET /api/docs            -> 200 ShelfListResponse（查 SQLite，不打 WeKnora）
 //   GET /api/docs/facets     -> 200 ShelfFacetsResponse
 // 参数：type/org/year/tag（逗号分隔多选，可重复传同名参数）、q、page、pageSize、sort
+// 主题维度兼容 topic/topics/tags 三个常见拼写（等价于 tag），不再静默忽略 ——
+// 见 parseShelfQuery 里 readTagFilter 的注释。
 // 说明：非法参数一律忽略并回落默认（前端传错不打断页面），只有参数类型彻底不可用才 400。
 import { Router } from 'express'
 import type { Request, Response } from 'express'
@@ -67,7 +69,7 @@ export function parseShelfQuery(raw: unknown): ShelfQuery {
     types: readMulti(q['type']),
     orgs: readMulti(q['org']),
     years: readMulti(q['year']),
-    tags: readMulti(q['tag']),
+    tags: readTagFilter(q),
     q: readNonEmpty(single(q['q'])) ?? null,
     page,
     pageSize,
@@ -79,6 +81,18 @@ function readSort(value: string | undefined): ShelfSort {
   return value !== undefined && (SHELF_SORTS as readonly string[]).includes(value)
     ? (value as ShelfSort)
     : 'year_desc'
+}
+
+/**
+ * 主题维度取值：契约名是 `tag`（单数）。
+ *
+ * QA-01 P0-1 顺带发现：前端/第三方很容易写成 `topic` 或 `tags`，而"非法参数一律忽略"
+ * 的口径会让它**静默回落成不筛选**，返回全量 —— 也就是"我筛了主题却拿到 42 条"。
+ * 这里把三个常见拼写都认成 `tag`（并集去重），宁可多认也不静默吞掉用户的筛选意图；
+ * 真正认不出的参数名（如 `foo=`）仍按原口径忽略，不给前端 400 打断。
+ */
+function readTagFilter(q: Record<string, unknown>): readonly string[] {
+  return readMulti([q['tag'], q['topic'], q['topics'], q['tags']])
 }
 
 /** 多选取值：数组或逗号串都吃；去重保序 */

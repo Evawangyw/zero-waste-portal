@@ -320,6 +320,69 @@ async function main(): Promise<void> {
     `${tagMissing.total}`,
   )
 
+  // ---- 5.5b 主题**有值**命中（QA-01 P0-1 回归）----
+  // 上一组只覆盖到「不存在的词」和「未标注」两条分支，唯独没覆盖"tag 命中有值"——
+  // 正是这条分支坏了（模板里的 % 被当成字面量，tag=测试领域 永远 0 条）。
+  // 这里按 facets 给出的**真实**主题值逐个筛，确保"有值"这条路径真的能命中。
+  const realTagFacets = facets.tags
+  if (realTagFacets.length === 0) {
+    console.log('  SKIP  主题有值命中（库里没有任何非空主题）')
+  } else {
+    let hitChecked = 0
+    for (const facet of realTagFacets) {
+      const res = await queryShelf(prisma, { ...baseQuery(), tags: [facet.value] })
+      check(
+        `tag=${facet.value}（有值）-> 命中 ${facet.count} 条且每条都含该主题`,
+        res.total === facet.count &&
+          res.total > 0 &&
+          res.items.every((i) => i.topics.includes(facet.value)),
+        `筛出 ${res.total}，facets 记 ${facet.count}`,
+      )
+      hitChecked += 1
+    }
+    // 主题子串不该误命中（元素级匹配，不是裸 LIKE）：'测试' 不该命中 '测试领域'
+    if (realTagFacets.some((f) => f.value.length >= 2)) {
+      const target = realTagFacets.find((f) => f.value.length >= 2)
+      if (target !== undefined) {
+        const partial = target.value.slice(0, 1)
+        const res = await queryShelf(prisma, { ...baseQuery(), tags: [partial] })
+        check(
+          `tag=${partial}（主题片段，不应误命中元素）-> total 为 0`,
+          res.total === 0 || realTagFacets.some((f) => f.value === partial),
+          `total=${res.total}`,
+        )
+      }
+    }
+    console.log(`  · 主题有值命中用例：${hitChecked} 个`)
+  }
+
+  // ---- 5.5c 主题参数名别名（QA-01 P0-1 顺带项：topic/tags 不许静默忽略）----
+  {
+    const firstTag = realTagFacets[0]
+    if (firstTag === undefined) {
+      console.log('  SKIP  主题参数名别名（库里没有非空主题可筛）')
+    } else {
+      const canonical = await queryShelf(prisma, { ...baseQuery(), tags: [firstTag.value] })
+      for (const alias of ['topic', 'topics', 'tags']) {
+        // 用 plain record 而不是 URLSearchParams：生产里传进来的是 Express 的 req.query
+        // （一个 plain object）。URLSearchParams 的数据藏在内部槽位里，
+        // 按属性名取永远是 undefined，拿它当输入会让本组用例变成空跑。
+        const viaAlias = parseShelfQuery({ [alias]: firstTag.value })
+        check(
+          `?${alias}= 拼写等价于 ?tag=（不再静默忽略）`,
+          JSON.stringify(viaAlias.tags) === JSON.stringify(canonical.appliedFilters.tag),
+          `${JSON.stringify(viaAlias.tags)}`,
+        )
+        const res = await queryShelf(prisma, viaAlias)
+        check(
+          `?${alias}=${firstTag.value} 真的筛出 ${firstTag.count} 条`,
+          res.total === firstTag.count,
+          `total=${res.total}`,
+        )
+      }
+    }
+  }
+
   // ---- 5.6 分页 ----
   const page1 = await queryShelf(prisma, { ...parseShelfQuery(new URLSearchParams()), page: 1 })
   const page2 = await queryShelf(prisma, { ...parseShelfQuery(new URLSearchParams()), page: 2 })

@@ -8,7 +8,9 @@
 // 口径与契约：docs/task-cards/T07-契约.md（PRD 第八节 R04 基础版）
 
 // ---- HTTP 契约
-export { trackRouter, trackJsonErrorHandler } from './track.router.js'
+// 注：原先导出的 trackJsonErrorHandler 已由全局 jsonErrorHandler
+// （src/middleware/json-error.handler.ts）接管并从 app.ts 移除，此处不再导出。
+export { trackRouter } from './track.router.js'
 export {
   ADMIN_TOKEN_HEADER,
   loadTrackAdminConfig,

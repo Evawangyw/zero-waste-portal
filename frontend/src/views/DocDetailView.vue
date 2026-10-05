@@ -25,6 +25,15 @@ const previewUrl = ref('')
 const previewUnavailableReason = ref('')
 const previewLoading = ref(false)
 
+/**
+ * 预览埋点去重标记（T07 / QA-01 P1-3）。
+ * 同一份资料的「自动预载」与「点按钮重载」只记一次 preview：
+ * 进详情页时 loadDetail() 会自动 loadPreview()，用户再点「在线预览」又 load 一次，
+ * 同一次预览行为被记两遍，preview 口径虚高一倍、污染「详情→预览→下载」漏斗。
+ * 换一份资料（docId 变了）才允许重新计数。
+ */
+let previewTrackedDocId = ''
+
 /** 下载 */
 const downloading = ref(false)
 /** 未登录时记下用户点的是哪个文件，登录回跳后可直接续下 */
@@ -33,6 +42,19 @@ const pendingDownloadName = ref('')
 const preview = computed<PreviewAvailability | null>(() => detail.value?.preview ?? null)
 const isPreviewable = computed(() => preview.value?.streamable === true)
 const downloadFileName = computed(() => detail.value?.download.fileName ?? '')
+
+/**
+ * 预览 iframe 的标题（P2-3：原来写死「资料预览」，而浏览器 PDF 阅读器顶部
+ * 显示的是 blob URL 里的 UUID，看着像出了故障）。改用原文件名，
+ * 至少 frame 的可访问名与浏览器标签是可读的。
+ */
+const previewTitle = computed(() => {
+  const name = detail.value?.doc.fileName ?? detail.value?.doc.readableTitle ?? ''
+  return name === '' ? '资料预览' : `预览：${name}`
+})
+
+/** 解析状态中文化（P2-4：全站其余文案都是中文，只有这里露英文 completed） */
+const parseStatusText = computed(() => formatParseStatus(detail.value?.doc.parseStatus ?? ''))
 
 onMounted(() => {
   void loadDetail()
@@ -57,7 +79,10 @@ async function loadDetail(): Promise<void> {
   }
 }
 
-/** 预览：能内联渲染（PDF/图片/文本）就直接开流，不能则读信封给出下载引导 */
+/**
+ * 预览：能内联渲染（PDF/图片/文本）就直接开流，不能则读信封给出下载引导。
+ * 无论自动预载还是用户点按钮，埋点都按 docId 去重（QA-01 P1-3）。
+ */
 async function loadPreview(): Promise<void> {
   if (detail.value === null) return
   if (!isPreviewable.value) {
@@ -72,12 +97,16 @@ async function loadPreview(): Promise<void> {
     previewUrl.value = URL.createObjectURL(blob)
     previewUnavailableReason.value = ''
     // T07 埋点：预览开流成功（只在真的能看时记，不记"点了但看不了"）
-    void trackPreview({
-      docId: docId.value,
-      fileType: detail.value.doc.fileType,
-      sizeBytes: detail.value.doc.fileSize,
-      title: detail.value.doc.readableTitle,
-    })
+    // 去重：同一 docId 只记一次，无论自动预载还是用户点按钮。
+    if (previewTrackedDocId !== docId.value) {
+      previewTrackedDocId = docId.value
+      void trackPreview({
+        docId: docId.value,
+        fileType: detail.value.doc.fileType,
+        sizeBytes: detail.value.doc.fileSize,
+        title: detail.value.doc.readableTitle,
+      })
+    }
   } catch (err) {
     // 预览失败不阻断详情页：给一句原因 + 下载按钮兜底
     previewUnavailableReason.value =
@@ -170,6 +199,29 @@ function formatDate(value: string | null): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10)
 }
+
+/**
+ * WeKnora 解析状态 -> 中文（P2-4）。
+ * 认不出的原值原样透出（宁可显示上游真实状态，也不要瞎猜成"已完成"）。
+ */
+function formatParseStatus(raw: string): string {
+  switch (raw.trim().toLowerCase()) {
+    case '':
+      return '—'
+    case 'completed':
+      return '已完成'
+    case 'processing':
+    case 'parsing':
+      return '解析中'
+    case 'pending':
+      return '待解析'
+    case 'failed':
+    case 'error':
+      return '解析失败'
+    default:
+      return raw
+  }
+}
 </script>
 
 <template>
@@ -219,9 +271,7 @@ function formatDate(value: string | null): string {
           <el-descriptions-item label="文件大小">{{
             formatSize(detail.doc.fileSize)
           }}</el-descriptions-item>
-          <el-descriptions-item label="解析状态">{{
-            detail.doc.parseStatus || '—'
-          }}</el-descriptions-item>
+          <el-descriptions-item label="解析状态">{{ parseStatusText }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{
             formatDate(detail.doc.createdAt)
           }}</el-descriptions-item>
@@ -279,8 +329,11 @@ function formatDate(value: string | null): string {
             v-if="previewUrl !== ''"
             :src="previewUrl"
             class="preview-frame"
-            title="资料预览"
+            :title="previewTitle"
           />
+          <p v-if="previewUrl !== ''" class="preview-filename">
+            当前预览：{{ detail.doc.fileName || detail.doc.readableTitle }}
+          </p>
           <p v-else class="muted">预览加载中…</p>
         </div>
 
@@ -373,5 +426,12 @@ function formatDate(value: string | null): string {
 
 .muted {
   color: var(--el-text-color-secondary);
+}
+
+.preview-filename {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
 }
 </style>

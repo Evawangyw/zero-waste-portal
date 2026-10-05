@@ -7,7 +7,8 @@ import { authRouter } from './modules/auth/index.js'
 import { docsRouter, fileRouter, shelfRouter } from './modules/docs/index.js'
 import { embedRouter } from './modules/embed/index.js'
 import { healthRouter } from './modules/health/index.js'
-import { trackRouter, trackJsonErrorHandler } from './modules/track/index.js'
+import { trackRouter } from './modules/track/index.js'
+import { jsonErrorHandler } from './middleware/json-error.handler.js'
 
 export function createApp(): Express {
   const app = express()
@@ -56,9 +57,14 @@ export function createApp(): Express {
   // 路径与前面所有路由不重叠，挂在最后即可；不改任何既有模块的行为。
   app.use(trackRouter)
 
-  // T07 兜底错误体：只拦 /api/track，其余路径原样 next(err) 交还 Express 默认处理
-  // （保证既有路由的报错行为不变）。必须注册在最后 —— 错误中间件只抓它之前抛出的错误。
-  app.use(trackJsonErrorHandler)
+  // 全局 JSON 错误信封（QA-01 P1-3）：任何 /api/* 的请求体解析失败（畸形 JSON、
+  // strict 模式非法原始值、超 1MB）都返回统一 JSON 信封，不再吐 Express 默认的
+  // HTML 错误页、也不回显解析器报错原文。非 /api 路径与业务代码主动抛的错一律
+  // 原样 next(err) 交还，保证既有路由行为不变。
+  // 必须注册在最后 —— 错误中间件只能抓到它之前抛出的错误。
+  // （原 trackJsonErrorHandler 只拦 /api/track，本卡起由全局 handler 统一接管；
+  //   它的信封与文案与 track 的完全一致，T07 契约行为不变。）
+  app.use(jsonErrorHandler)
 
   return app
 }

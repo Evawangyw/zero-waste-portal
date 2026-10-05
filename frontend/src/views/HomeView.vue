@@ -7,11 +7,13 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { SAMPLE_QUESTIONS } from '../constants'
+import { fetchShelfTotal } from '../api/docs'
 import {
   askWidget,
   flushPendingQuery,
   mountWidget,
   widgetError,
+  widgetQueuedAsks,
   widgetStatus,
 } from '../composables/useWidget'
 import { currentUser } from '../composables/useAuth'
@@ -21,13 +23,29 @@ const router = useRouter()
 const keyword = ref('')
 const customQuestion = ref('')
 
+/**
+ * 书架资料总条数（P2-5：原来「共 42 条」是硬编码，数据一变就与实际失配）。
+ * 读接口；读不到就退回 null，模板不显示数字而不是显示一个错的数字。
+ */
+const shelfTotal = ref<number | null>(null)
+
 onMounted(() => {
-  // 官方 loader 就绪后补发排队中的问题（用户在脚本到达前点了示例问题的场景）
+  // 官方 loader 就绪后放行排队中的问题（用户在脚本到达前点了示例问题的场景）
   window.setTimeout(() => {
     flushPendingQuery()
   }, 800)
   void mountWidget()
+  void loadShelfTotal()
 })
+
+async function loadShelfTotal(): Promise<void> {
+  try {
+    shelfTotal.value = await fetchShelfTotal()
+  } catch {
+    // 统计条数只是锦上添花，取不到就不显示数字，不打断页面
+    shelfTotal.value = null
+  }
+}
 
 /** 点示例问题 -> 交给挂件自动发送 */
 function onSampleQuestion(text: string): void {
@@ -56,7 +74,7 @@ function onSearch(): void {
     <el-card class="ask-card" shadow="never">
       <h1 class="title">问点什么</h1>
       <p class="subtitle">
-        下面是 AI 助手（右下角 💬 挂件）。它只依据本知识库里的零废弃政策与实践资料回答，
+        下面是 AI 助手（右下角 💬 挂件）。它只依据本知识库里的零废弃政策与实践资料生成答案，
         资料里没有的它会直说没有，不会编。
       </p>
 
@@ -94,13 +112,18 @@ function onSearch(): void {
         type="warning"
         show-icon
         :closable="false"
-        title="AI 助手暂不可用"
+        title="AI 暂时不可用，请稍后再试"
         :description="`${widgetError}；你也可以直接用下面的搜索框去书架找资料。`"
       />
       <p v-else-if="widgetStatus === 'idle' || widgetStatus === 'loading'" class="widget-loading">
         AI 助手加载中…（若长时间未出现，请检查右下角是否被浏览器扩展遮挡）
       </p>
-      <p v-else class="widget-ok">AI 助手已就绪，点右下角 💬 打开，或直接点上面的示例问题。</p>
+      <p v-else class="widget-ok">
+        AI 助手已就绪，点右下角 💬 打开，或直接点上面的示例问题。
+        <template v-if="widgetQueuedAsks > 0">
+          （已有 {{ widgetQueuedAsks }} 个问题在排队，上一条答完会自动发出）
+        </template>
+      </p>
 
       <p v-if="currentUser" class="widget-user">
         已登录（{{ currentUser.name }}），提问会带上你的身份信息；未登录也可以问。
@@ -119,7 +142,10 @@ function onSearch(): void {
         <el-button @click="onSearch">去书架搜</el-button>
       </div>
       <p class="tips">
-        书架支持按年份、发布机构、知识类型、主题多维筛选，共 42 条零废弃政策与实践资料。
+        书架支持按年份、发布机构、知识类型、主题多维筛选，共
+        <template v-if="shelfTotal !== null">{{ shelfTotal }} 条</template>
+        <template v-else>若干条</template>
+        零废弃政策与实践资料。
       </p>
     </el-card>
 
@@ -127,7 +153,11 @@ function onSearch(): void {
       <el-col :xs="24" :sm="12" :lg="8">
         <el-card shadow="hover" class="entry-card">
           <template #header><strong>资料书架</strong></template>
-          <p>42 条政策与实践资料，按四个维度筛选，带在线预览与下载。</p>
+          <p>
+            <template v-if="shelfTotal !== null">{{ shelfTotal }} 条</template>
+            <template v-else>若干条</template>
+            政策与实践资料，按四个维度筛选，带在线预览与下载。
+          </p>
           <router-link to="/shelf">
             <el-button type="primary" plain size="small">进入书架</el-button>
           </router-link>
@@ -136,7 +166,7 @@ function onSearch(): void {
       <el-col :xs="24" :sm="12" :lg="8">
         <el-card shadow="hover" class="entry-card">
           <template #header><strong>AI 助手</strong></template>
-          <p>免登录提问，答案带出处；答不出来会明说，不猜。</p>
+          <p>免登录提问，答案基于库内资料生成；答不出来会明说，不猜。</p>
           <el-button size="small" @click="onSampleQuestion(SAMPLE_QUESTIONS[0].text)">
             问一个试试
           </el-button>

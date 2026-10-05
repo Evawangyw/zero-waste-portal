@@ -52,10 +52,17 @@ const eventRows = computed(() =>
 /** 无答案率：后端给的是 0~1 的小数（= noAnswer / judged），这里只做展示换算 */
 const noAnswerRateText = computed(() => percent(summary.value?.asks.noAnswerRate ?? 0))
 
-/** 下载对账：两者不等说明有绕过前端直连接口的调用（后端 DownloadLog vs 前端 EventLog） */
-const downloadsAligned = computed(() => {
+/**
+ * 下载对账（QA-01 P2-9）。
+ *
+ * 原实现在两者不等时直接下结论「有接口被直连」—— QA-01 实测证明这是**没有证据的归因**：
+ * 两个计数器在测试窗口内是同步 +5 的，差额来自历史遗留（基线就 7 vs 2）。
+ * 页面不该替管理员下结论，这里只陈述两个事实：差额是多少、以及差额可能来自哪里。
+ */
+const downloadGap = computed(() => {
   const downloads = summary.value?.downloads
-  return downloads === undefined || downloads.logRows === downloads.events
+  if (downloads === undefined) return null
+  return downloads.logRows - downloads.events
 })
 
 // ---------------------------------------------------------------- 取数
@@ -137,7 +144,7 @@ onUnmounted(() => {
     <el-card v-if="!showPanel" shadow="never" class="deny-card">
       <el-result
         v-if="!authChecked"
-        icon="loading"
+        icon="info"
         title="正在校验登录态…"
         sub-title="稍等一下，马上就好"
       />
@@ -205,6 +212,28 @@ onUnmounted(() => {
       />
 
       <template v-if="summary !== null">
+        <!-- 口径说明（QA-01 P2-8 / P2-9：管理员最容易在这两处误读，故摆到最前面） -->
+        <el-alert type="info" :closable="false" class="caliber-note">
+          <template #title>统计口径说明（先看这段再解读下面的数字）</template>
+          <ul class="caliber-list">
+            <li>
+              <strong>「注册用户数」与 register 事件数不相等是正常的</strong>：前者是 users
+              表的行数，后者只统计<strong>经注册页提交</strong>成功的次数。站点外直接调注册接口
+              创建的账号会进 users 表但不计 register 事件，所以事件数 ≤ 用户数。
+            </li>
+            <li>
+              <strong>DownloadLog 与前端 download 事件是两个口径</strong>：DownloadLog 是后端在
+              开流前写的权威记录，前端事件只覆盖「浏览器内发起的下载」。两者不等时本页只陈述差额，
+              不替管理员下结论 —— 差额可能来自绕过前端的直连接口，也可能来自历史遗留或统计口径调整，
+              需要按时间窗口逐段核对才能定性。
+            </li>
+            <li>
+              <strong>AI 提问「未判定」占多数是当前已知限制</strong>：官方挂件 v0.8.2 没有回答回调，
+              站内发起的提问拿不到回答证据，故一律记为未判定、不进无答案率分母。
+            </li>
+          </ul>
+        </el-alert>
+
         <!-- ① 总览卡 -->
         <el-card shadow="never" class="block">
           <template #header><span class="block-title">① 总览</span></template>
@@ -324,18 +353,18 @@ onUnmounted(() => {
                 下载口径（后端双写）：DownloadLog {{ summary.downloads.logRows }} 行（服务端权威）
                 ／ 前端埋点 {{ summary.downloads.events }} 条 —
                 <el-tag
-                  :type="downloadsAligned ? 'success' : 'warning'"
+                  :type="downloadGap === 0 ? 'success' : 'warning'"
                   size="small"
                   effect="plain"
                 >
-                  {{ downloadsAligned ? '两者一致' : '两者不等：有接口被直连' }}
+                  {{ downloadGap === 0 ? '两者一致' : `差额 ${downloadGap} 条（原因待查）` }}
                 </el-tag>
               </p>
             </el-card>
           </el-col>
           <el-col :xs="24" :md="10">
             <el-card shadow="never" class="block">
-              <template #header><span class="block-title">⑤ AI 提问</span></template>
+              <template #header><span class="block-title">⑥ AI 提问</span></template>
               <el-descriptions :column="1" border>
                 <el-descriptions-item label="提问总数">
                   {{ summary.asks.total }}
@@ -394,6 +423,12 @@ onUnmounted(() => {
 
 .load-error {
   margin: 0;
+}
+
+.caliber-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  line-height: 1.8;
 }
 
 .block {
