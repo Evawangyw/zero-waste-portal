@@ -1,10 +1,10 @@
 <script setup lang="ts">
-// 基础导航条（T05：结构完整即可，不做美化）。
-// 右侧显示登录态；登出后回首页。
+// 顶栏：对齐基金会官网——左侧标志与站名，右侧加粗导航，选中为主绿。
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { APP_NAME } from '../constants'
+import logoUrl from '../assets/foundation-mark.png'
 import { authToken, clearAuth, currentUser, isLoggedIn } from '../composables/useAuth'
 
 const route = useRoute()
@@ -37,11 +37,16 @@ void authToken
 </script>
 
 <template>
-  <el-header class="site-nav" height="auto">
-    <div class="nav-left">
+  <header class="site-nav">
+    <div class="nav-inner">
       <router-link to="/" class="brand">
-        {{ APP_NAME }}
+        <img class="brand-mark" :src="logoUrl" alt="六尺巷基金会" />
+        <span class="brand-text">
+          <span class="brand-org">安徽省六尺巷慈善基金会</span>
+          <span class="brand-name">{{ APP_NAME }}</span>
+        </span>
       </router-link>
+
       <nav class="nav-links">
         <router-link to="/" :class="{ active: isActive('/') }">首页</router-link>
         <router-link to="/foundation" :class="{ active: isActive('/foundation') }">基金会</router-link>
@@ -50,78 +55,131 @@ void authToken
           管理统计
         </router-link>
       </nav>
-    </div>
 
-    <div class="nav-right">
-      <template v-if="isLoggedIn">
-        <span class="user-name">{{ nickname }}，你好</span>
-        <el-button size="small" @click="onLogout">退出登录</el-button>
-      </template>
-      <el-button v-else size="small" type="primary" plain @click="goAuth">登录 / 注册</el-button>
+      <div class="nav-right">
+        <template v-if="isLoggedIn">
+          <span class="user-name">{{ nickname }}，你好</span>
+          <el-button size="small" @click="onLogout">退出登录</el-button>
+        </template>
+        <el-button v-else size="small" type="primary" @click="goAuth">登录 / 注册</el-button>
+      </div>
     </div>
-  </el-header>
+  </header>
 </template>
 
 <style scoped>
-.site-nav.el-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-  flex-wrap: wrap;
-  height: auto;
-  min-height: 60px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--el-border-color-light);
+.site-nav {
   background: #fff;
-  --el-header-height: auto;
+  border-bottom: 1px solid var(--zw-line);
 }
 
-.nav-left {
+.nav-inner {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  min-width: 0;
+  gap: 24px;
+  width: 100%;
+  max-width: var(--zw-content);
+  margin: 0 auto;
+  padding: 14px 16px;
+  box-sizing: border-box;
 }
 
 .brand {
-  flex: none;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--el-color-primary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--zw-ink);
   text-decoration: none;
-  white-space: nowrap;
+}
+
+.brand-mark {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  flex: none;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.brand-org {
+  color: var(--zw-muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.brand-name {
+  color: var(--zw-ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .nav-links {
   display: flex;
-  flex: none;
-  gap: 16px;
+  align-items: center;
+  gap: 28px;
+  margin-left: auto;
 }
 
 .nav-links a {
-  color: var(--el-text-color-regular);
+  color: var(--zw-ink);
+  font-size: 18px;
+  font-weight: 700;
   text-decoration: none;
-  padding: 4px 0;
+  padding: 6px 0 4px;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
 
-.nav-links a.active {
-  color: var(--el-color-primary);
-  border-bottom-color: var(--el-color-primary);
+.nav-links a.active,
+.nav-links a:hover {
+  color: var(--zw-green);
+  border-bottom-color: var(--zw-green);
 }
 
 .nav-right {
   display: flex;
   align-items: center;
-  flex: none;
   gap: 12px;
+  flex: none;
 }
 
 .user-name {
-  color: var(--el-text-color-regular);
+  color: var(--zw-muted);
   font-size: 14px;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .nav-inner {
+    flex-wrap: wrap;
+    gap: 10px 16px;
+  }
+
+  .nav-links {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    gap: 18px;
+  }
+
+  .nav-links a {
+    font-size: 16px;
+  }
+
+  .brand-mark {
+    width: 48px;
+    height: 48px;
+  }
+
+  .brand-name {
+    font-size: 17px;
+  }
 }
 </style>

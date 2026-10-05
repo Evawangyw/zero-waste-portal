@@ -71,11 +71,19 @@ function onSearch(): void {
 
 <template>
   <div class="home">
-    <el-card class="ask-card" shadow="never">
-      <h1 class="title">问点什么</h1>
+    <section class="hero">
+      <p class="eyebrow">安徽省六尺巷慈善基金会 · 零废弃专栏</p>
+      <h1 class="title">零废弃知识库</h1>
       <p class="subtitle">
-        下面是 AI 助手（右下角 💬 挂件）。它只依据本知识库里的零废弃政策与实践资料生成答案，
-        资料里没有的它会直说没有，不会编。
+        依据库内政策与实践资料回答问题。资料里没有的，助手会直说没有，不会编。
+      </p>
+      <p class="motto">六尺归心、礼让自然</p>
+    </section>
+
+    <el-card class="ask-card" shadow="never">
+      <template #header>向知识库提问</template>
+      <p class="subtitle">
+        AI 助手在页面右下角。也可以在这里写下问题，或点一条示例，它会带着问题打开。
       </p>
 
       <!-- 自定义提问 -->
@@ -131,7 +139,7 @@ function onSearch(): void {
     </el-card>
 
     <el-card class="search-card" shadow="never">
-      <h2 class="subtitle-title">或者，自己翻书架</h2>
+      <template #header>自己翻书架</template>
       <div class="search-row">
         <el-input
           v-model="keyword"
@@ -184,6 +192,7 @@ function onSearch(): void {
     </el-row>
 
     <el-card class="org-card" shadow="never">
+      <template #header>关于基金会</template>
       <div class="org-row">
         <div>
           <h2 class="subtitle-title">安徽省六尺巷慈善基金会</h2>
@@ -203,12 +212,35 @@ function onSearch(): void {
 .home {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+}
+
+.hero {
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--zw-line);
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--zw-green);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
 }
 
 .title {
-  margin: 0 0 8px;
-  font-size: 26px;
+  margin: 0 0 10px;
+  color: var(--zw-ink);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.motto {
+  margin: 0;
+  color: var(--zw-green);
+  font-size: 16px;
+  letter-spacing: 0.12em;
 }
 
 .subtitle,
@@ -216,11 +248,6 @@ function onSearch(): void {
   margin: 0 0 16px;
   color: var(--el-text-color-secondary);
   line-height: 1.7;
-}
-
-.subtitle-title {
-  margin: 0 0 12px;
-  font-size: 18px;
 }
 
 .custom-ask {
@@ -278,8 +305,18 @@ function onSearch(): void {
 }
 
 @media (max-width: 640px) {
+  .title {
+    font-size: 26px;
+  }
+
+  .custom-ask,
+  .search-row,
   .org-row {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .org-row {
     align-items: flex-start;
   }
 }
