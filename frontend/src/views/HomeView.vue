@@ -1,34 +1,19 @@
 <script setup lang="ts">
-// 首页（T05）：第一屏 = AI 提问入口（主）+ 搜索框（次，跳书架）+ 3 个示例问题。
-//
-// 挂件按官方「安全模式」接（见 composables/useWidget.ts），本页面不自己写问答 UI。
-// 页面只做两件事：把用户的问题交给挂件（openWithQuery）、把关键词交给书架（路由 query）。
+// 登录后的首页只保留向知识库提问。问题交给官方挂件，不在本页自写问答窗口。
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { SAMPLE_QUESTIONS } from '../constants'
-import { fetchShelfTotal } from '../api/docs'
 import {
   askWidget,
   flushPendingQuery,
   mountWidget,
   widgetError,
-  widgetQueuedAsks,
   widgetStatus,
 } from '../composables/useWidget'
-import { currentUser, isLoggedIn } from '../composables/useAuth'
+import { isLoggedIn } from '../composables/useAuth'
 import FoundationView from './FoundationView.vue'
 
-const router = useRouter()
-
-const keyword = ref('')
 const customQuestion = ref('')
-
-/**
- * 书架资料总条数（P2-5：原来「共 42 条」是硬编码，数据一变就与实际失配）。
- * 读接口；读不到就退回 null，模板不显示数字而不是显示一个错的数字。
- */
-const shelfTotal = ref<number | null>(null)
 
 onMounted(() => {
   if (!isLoggedIn.value) return
@@ -44,16 +29,6 @@ function startMemberHome(): void {
     flushPendingQuery()
   }, 800)
   void mountWidget()
-  void loadShelfTotal()
-}
-
-async function loadShelfTotal(): Promise<void> {
-  try {
-    shelfTotal.value = await fetchShelfTotal()
-  } catch {
-    // 统计条数只是锦上添花，取不到就不显示数字，不打断页面
-    shelfTotal.value = null
-  }
 }
 
 /** 点示例问题 -> 交给挂件自动发送 */
@@ -71,32 +46,14 @@ function onCustomAsk(): void {
   askWidget(text)
 }
 
-/** 搜索框（次要入口）-> 跳书架并带上关键词 */
-function onSearch(): void {
-  const text = keyword.value.trim()
-  void router.push(text === '' ? { path: '/shelf' } : { path: '/shelf', query: { q: text } })
-}
 </script>
 
 <template>
   <FoundationView v-if="!isLoggedIn" />
   <div v-else class="home">
-    <section class="hero">
-      <p class="eyebrow">安徽省六尺巷慈善基金会 · 零废弃专栏</p>
-      <h1 class="title">零废弃知识库</h1>
-      <p class="subtitle">
-        依据库内政策与实践资料回答问题。资料里没有的，助手会直说没有，不会编。
-      </p>
-      <p class="motto">六尺归心、礼让自然</p>
-    </section>
-
     <el-card class="ask-card" shadow="never">
       <template #header>向知识库提问</template>
-      <p class="subtitle">
-        AI 助手在页面右下角。也可以在这里写下问题，或点一条示例，它会带着问题打开。
-      </p>
 
-      <!-- 自定义提问 -->
       <div class="custom-ask">
         <el-input
           v-model="customQuestion"
@@ -107,23 +64,17 @@ function onSearch(): void {
         <el-button type="primary" @click="onCustomAsk">向 AI 提问</el-button>
       </div>
 
-      <!-- 示例问题（PRD 两类场景 + 政策原文式） -->
       <div class="samples">
-        <span class="samples-label">试试这些问题：</span>
-        <el-space wrap>
-          <el-button
-            v-for="item in SAMPLE_QUESTIONS"
-            :key="item.text"
-            plain
-            size="small"
-            @click="onSampleQuestion(item.text)"
-          >
-            {{ item.scene }}：{{ item.text }}
-          </el-button>
-        </el-space>
+        <el-button
+          v-for="item in SAMPLE_QUESTIONS"
+          :key="item.text"
+          plain
+          @click="onSampleQuestion(item.text)"
+        >
+          {{ item.text }}
+        </el-button>
       </div>
 
-      <!-- 挂件状态提示（失败时降级提示，不让整页挂掉） -->
       <el-alert
         v-if="widgetStatus === 'error'"
         class="widget-alert"
@@ -131,64 +82,9 @@ function onSearch(): void {
         show-icon
         :closable="false"
         title="AI 暂时不可用，请稍后再试"
-        :description="`${widgetError}；你也可以直接用下面的搜索框去书架找资料。`"
+        :description="widgetError"
       />
-      <p v-else-if="widgetStatus === 'idle' || widgetStatus === 'loading'" class="widget-loading">
-        AI 助手加载中…（若长时间未出现，请检查右下角是否被浏览器扩展遮挡）
-      </p>
-      <p v-else class="widget-ok">
-        AI 助手已就绪，点右下角 💬 打开，或直接点上面的示例问题。
-        <template v-if="widgetQueuedAsks > 0">
-          （已有 {{ widgetQueuedAsks }} 个问题在排队，上一条答完会自动发出）
-        </template>
-      </p>
-
-      <p v-if="currentUser" class="widget-user">已登录（{{ currentUser.name }}），提问会带上你的身份信息。</p>
     </el-card>
-
-    <el-card class="search-card" shadow="never">
-      <template #header>自己翻书架</template>
-      <div class="search-row">
-        <el-input
-          v-model="keyword"
-          placeholder="按文件名/标题搜索，如：垃圾分类"
-          clearable
-          @keyup.enter="onSearch"
-        />
-        <el-button @click="onSearch">去书架搜</el-button>
-      </div>
-      <p class="tips">
-        书架支持按年份、发布机构、知识类型、主题多维筛选，共
-        <template v-if="shelfTotal !== null">{{ shelfTotal }} 条</template>
-        <template v-else>若干条</template>
-        零废弃政策与实践资料。
-      </p>
-    </el-card>
-
-    <el-row class="entries" :gutter="16">
-      <el-col :xs="24" :sm="12">
-        <el-card shadow="hover" class="entry-card">
-          <template #header><strong>资料书架</strong></template>
-          <p>
-            <template v-if="shelfTotal !== null">{{ shelfTotal }} 条</template>
-            <template v-else>若干条</template>
-            政策与实践资料，按四个维度筛选，带在线预览与下载。
-          </p>
-          <router-link to="/shelf">
-            <el-button type="primary" plain size="small">进入书架</el-button>
-          </router-link>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12">
-        <el-card shadow="hover" class="entry-card">
-          <template #header><strong>AI 助手</strong></template>
-          <p>答案基于库内资料生成；答不出来会明说，不猜。</p>
-          <el-button size="small" @click="onSampleQuestion(SAMPLE_QUESTIONS[0].text)">
-            问一个试试
-          </el-button>
-        </el-card>
-      </el-col>
-    </el-row>
   </div>
 </template>
 
@@ -196,42 +92,6 @@ function onSearch(): void {
 .home {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-.hero {
-  padding: 8px 0 4px;
-  border-bottom: 1px solid var(--zw-line);
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: var(--zw-green);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.title {
-  margin: 0 0 10px;
-  color: var(--zw-ink);
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.motto {
-  margin: 0;
-  color: var(--zw-green);
-  font-size: 16px;
-  letter-spacing: 0.12em;
-}
-
-.subtitle,
-.tips {
-  margin: 0 0 16px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.7;
 }
 
 .custom-ask {
@@ -241,49 +101,23 @@ function onSearch(): void {
 }
 
 .samples {
-  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
 
-.samples-label {
-  margin-right: 8px;
-  color: var(--el-text-color-regular);
-  font-size: 14px;
+.samples :deep(.el-button) {
+  width: 100%;
+  margin-left: 0;
 }
 
 .widget-alert {
-  margin-top: 8px;
-}
-
-.widget-loading,
-.widget-ok,
-.widget-user {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.search-row {
-  display: flex;
-  gap: 12px;
-}
-
-.entry-card {
-  height: 100%;
-}
-
-.entry-card p {
-  margin: 0 0 12px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.7;
+  margin-top: 16px;
 }
 
 @media (max-width: 640px) {
-  .title {
-    font-size: 26px;
-  }
-
-  .custom-ask,
-  .search-row {
+  .custom-ask {
     flex-direction: column;
     align-items: stretch;
   }
