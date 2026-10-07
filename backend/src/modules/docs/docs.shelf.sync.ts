@@ -38,6 +38,8 @@ export function syncShelfIndex(options: SyncShelfIndexOptions = {}): Promise<Syn
 export function toShelfRow(item: WeKnoraKnowledge): KnowledgeIndexRow {
   const cleaned = cleanFileName(item.fileName !== '' ? item.fileName : item.title)
   const meta = parseShelfMetadata(item.customMetadata)
+  // 文件没有「知识领域」时，用 WeKnora 标签名做主题，书架才能按标签分类。
+  const topics = meta.topics.length > 0 ? meta.topics : item.tags
   return {
     knowledgeId: item.id,
     knowledgeBaseId: item.knowledgeBaseId,
@@ -52,7 +54,7 @@ export function toShelfRow(item: WeKnoraKnowledge): KnowledgeIndexRow {
     year: meta.year,
     org: meta.org,
     docType: meta.docType,
-    topics: JSON.stringify([...meta.topics]),
+    topics: JSON.stringify([...topics]),
     sourceUpdatedAt: parseDateOrNullSafe(item.updatedAt),
     syncedAt: new Date(),
   }
