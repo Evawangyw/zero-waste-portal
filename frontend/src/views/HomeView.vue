@@ -3,10 +3,12 @@
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { SAMPLE_QUESTIONS } from '../constants'
+import { fetchShelfTotal } from '../api/docs'
 import {
   askWidget,
   flushPendingQuery,
   mountWidget,
+  openWidget,
   widgetError,
   widgetStatus,
 } from '../composables/useWidget'
@@ -14,6 +16,9 @@ import { isLoggedIn } from '../composables/useAuth'
 import FoundationView from './FoundationView.vue'
 
 const customQuestion = ref('')
+/** 本站索引还没有正式 PDF。这时不能把问题交给模型，否则会编出没有依据的政策。 */
+const libraryEmpty = ref(false)
+const unanswered = ref('')
 
 onMounted(() => {
   if (!isLoggedIn.value) return
@@ -29,20 +34,37 @@ function startMemberHome(): void {
     flushPendingQuery()
   }, 800)
   void mountWidget()
+  void loadLibraryState()
 }
 
-/** 点示例问题 -> 交给挂件自动发送 */
+async function loadLibraryState(): Promise<void> {
+  try {
+    libraryEmpty.value = (await fetchShelfTotal()) === 0
+  } catch {
+    libraryEmpty.value = false
+  }
+}
+
 function onSampleQuestion(text: string): void {
-  askWidget(text)
+  submitQuestion(text)
 }
 
-/** 自己写个问题 -> 也走挂件（与示例问题同一条通路，不另造 UI） */
 function onCustomAsk(): void {
-  const text = customQuestion.value.trim()
+  submitQuestion(customQuestion.value)
+}
+
+function submitQuestion(raw: string): void {
+  const text = raw.trim()
   if (text === '') {
     ElMessage.warning('请先输入你的问题')
     return
   }
+  if (libraryEmpty.value) {
+    unanswered.value = text
+    void openWidget()
+    return
+  }
+  unanswered.value = ''
   askWidget(text)
 }
 
@@ -73,6 +95,12 @@ function onCustomAsk(): void {
         >
           {{ item.text }}
         </el-button>
+      </div>
+
+      <div v-if="unanswered !== ''" class="empty-answer">
+        <p class="empty-q">{{ unanswered }}</p>
+        <p>库内暂未收录正式资料，所以不能回答。</p>
+        <p>占位书架里的文字不是答案。正式 PDF 入库后，助手会按库内资料回答，并标出来源。</p>
       </div>
 
       <el-alert
@@ -110,6 +138,26 @@ function onCustomAsk(): void {
 .samples :deep(.el-button) {
   width: 100%;
   margin-left: 0;
+}
+
+.empty-answer {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #f7f1e6;
+  border: 1px solid var(--zw-line);
+  line-height: 1.7;
+}
+
+.empty-answer p {
+  margin: 0 0 8px;
+}
+
+.empty-answer p:last-child {
+  margin-bottom: 0;
+}
+
+.empty-q {
+  font-weight: 700;
 }
 
 .widget-alert {

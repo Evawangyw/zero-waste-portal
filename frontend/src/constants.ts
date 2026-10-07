@@ -43,13 +43,13 @@ export const TRACK_EVENT_LABELS: readonly {
   readonly key: TrackEventName
   readonly label: string
 }[] = [
-  { key: 'page_view', label: '页面浏览 page_view' },
-  { key: 'search', label: '检索 search' },
-  { key: 'preview', label: '预览 preview' },
-  { key: 'download', label: '下载 download' },
-  { key: 'ai_ask', label: 'AI 提问 ai_ask' },
-  { key: 'register', label: '注册 register' },
-  { key: 'feedback_submit', label: '反馈提交 feedback_submit' },
+  { key: 'page_view', label: '页面浏览' },
+  { key: 'search', label: '检索' },
+  { key: 'preview', label: '预览' },
+  { key: 'download', label: '下载' },
+  { key: 'ai_ask', label: '提问' },
+  { key: 'register', label: '注册' },
+  { key: 'feedback_submit', label: '提交反馈' },
 ]
 
 /** 管理统计页自动刷新间隔：5 分钟（T08lite 卡片口径，二选一里我选了自动刷新 + 手动按钮都给） */

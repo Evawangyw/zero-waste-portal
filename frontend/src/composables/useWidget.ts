@@ -268,6 +268,12 @@ export function flushPendingQuery(): void {
   drainAskQueue()
 }
 
+/** 只打开右下角面板，不把问题发给模型。库内还没有正式资料时用。 */
+export async function openWidget(): Promise<void> {
+  await mountWidget()
+  window.WeKnora?.open()
+}
+
 /** 注入页面上下文（随每次提问进模型，便于按场景区分回答） */
 export function setWidgetContext(context: Record<string, unknown>): void {
   window.WeKnora?.setContext(context)

@@ -308,6 +308,10 @@ function onPageChange(next: number): void {
 
 /** 零结果 -> 把当前条件预填进挂件并打开（官方 openWithQuery） */
 function askAiAboutZeroResult(): void {
+  if (usingProxy.value) {
+    ElMessage.info('库内还没有正式 PDF，这个问题没有依据，不能回答。')
+    return
+  }
   askWidget(zeroResultQuestion.value)
 }
 
@@ -562,7 +566,7 @@ watch(
 
         <template v-else>
           <p v-if="usingProxy" class="proxy-note">
-            索引里还没有 PDF，先用占位书摆出书架。点书脊可以展开内容，正式文件接入后会换成真实资料。
+            这 {{ displayBooks.length }} 本是占位书，用来演示筛选和点开。正式 PDF 入库后会出现在同一位置，可以预览和下载原文。占位文字不能当作答案。
           </p>
           <div class="bookcase">
             <div v-for="(row, rowIndex) in bookRows" :key="rowIndex" class="shelf-row">
@@ -593,7 +597,11 @@ watch(
             </div>
             <div class="open-pages">
               <p class="open-meta">{{ openedBook.docType }} · {{ openedBook.topics.join('、') || '未标注主题' }}</p>
-              <p v-for="(paragraph, index) in openedBook.pages" :key="index">{{ paragraph }}</p>
+              <template v-if="openedBook.proxy">
+                <p>这是占位书，不是正式资料。</p>
+                <p>正式 PDF 入库后，这里可以预览和下载原文。</p>
+              </template>
+              <p v-for="(paragraph, index) in openedBook.pages" v-else :key="index">{{ paragraph }}</p>
               <router-link v-if="openedBook.detailTo" :to="openedBook.detailTo">
                 <el-button type="primary" size="small">打开资料详情</el-button>
               </router-link>
