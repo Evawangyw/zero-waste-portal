@@ -454,7 +454,19 @@ function toKnowledge(raw: unknown): WeKnoraKnowledge {
 
 function toStringArray(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return []
-  return value.filter((v): v is string => typeof v === 'string')
+  const names: string[] = []
+  for (const item of value) {
+    const name = readTagName(item)
+    if (name !== '' && !names.includes(name)) names.push(name)
+  }
+  return names
+}
+
+/** WeKnora 列表里的标签有时是字符串，有时是 { id, name }。书架只需要名称。 */
+function readTagName(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value !== 'object' || value === null || !('name' in value)) return ''
+  return typeof value.name === 'string' ? value.name.trim() : ''
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

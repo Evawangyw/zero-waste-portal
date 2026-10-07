@@ -69,14 +69,35 @@ const displayBooks = computed(() => {
   return sortBooks(source)
 })
 
-const bookRows = computed(() => {
+interface BookGroup {
+  readonly label: string
+  readonly rows: ShelfBook[][]
+}
+
+const bookGroups = computed((): readonly BookGroup[] => {
+  if (usingProxy.value) {
+    return [{ label: '', rows: chunkBooks(displayBooks.value) }]
+  }
+  const grouped = new Map<string, ShelfBook[]>()
+  for (const book of displayBooks.value) {
+    const label = book.topics[0] === undefined || book.topics[0] === '' ? '未标注' : book.topics[0]
+    const list = grouped.get(label) ?? []
+    list.push(book)
+    grouped.set(label, list)
+  }
+  return [...grouped.entries()]
+    .sort((left, right) => left[0].localeCompare(right[0], 'zh'))
+    .map(([label, books]) => ({ label, rows: chunkBooks(books) }))
+})
+
+function chunkBooks(books: readonly ShelfBook[]): ShelfBook[][] {
   const size = Math.max(booksPerRow.value, 1)
   const rows: ShelfBook[][] = []
-  for (let index = 0; index < displayBooks.value.length; index += size) {
-    rows.push(displayBooks.value.slice(index, index + size))
+  for (let index = 0; index < books.length; index += size) {
+    rows.push(books.slice(index, index + size))
   }
   return rows
-})
+}
 
 const openedBook = computed(() => displayBooks.value.find((book) => book.id === openedBookId.value) ?? null)
 
@@ -226,23 +247,27 @@ function toShelfBook(item: ShelfItem): ShelfBook {
   return {
     id: item.id,
     title: item.readableTitle,
-    year: item.year,
-    org: item.org,
-    docType: item.docType,
+    year: presentValue(item.year),
+    org: presentValue(item.org),
+    docType: presentValue(item.docType),
     topics: item.topics,
     spine: tone,
     height: 156 + (Math.abs(hashText(item.id)) % 5) * 8,
     pages: [
-      `${item.org} · ${item.year} · ${item.docType}`,
-      item.topics.length > 0 ? `主题：${item.topics.join('、')}` : '主题未标注',
+      [item.org, item.year, item.docType].filter((part) => part !== '').join(' · '),
+      item.topics.length > 0 ? `标签：${item.topics.join('、')}` : '标签未标注',
       '点击下方入口可打开这条资料的详情、预览和下载。',
-    ],
+    ].filter((line) => line !== ''),
     proxy: false,
     detailTo: `/doc/${item.id}`,
   }
 }
 
 const SPINE_TONES = ['#1f6b4a', '#8c3a3a', '#3d4f7c', '#8a6232', '#6b3a4a', '#1e4d6b', '#4a3f35']
+
+function presentValue(value: string): string {
+  return value === '' || value === MISSING_LABEL ? '' : value
+}
 
 function hashText(value: string): number {
   let hash = 0
@@ -568,8 +593,10 @@ watch(
           <p v-if="usingProxy" class="proxy-note">
             这 {{ displayBooks.length }} 本是占位书，用来演示筛选和点开。正式 PDF 入库后会出现在同一位置，可以预览和下载原文。占位文字不能当作答案。
           </p>
+          <section v-for="group in bookGroups" :key="group.label || 'all'" class="tag-group">
+            <h3 v-if="group.label !== ''" class="tag-heading">{{ group.label }}</h3>
           <div class="bookcase">
-            <div v-for="(row, rowIndex) in bookRows" :key="rowIndex" class="shelf-row">
+            <div v-for="(row, rowIndex) in group.rows" :key="rowIndex" class="shelf-row">
               <div class="books">
                 <button
                   v-for="book in row"
@@ -582,21 +609,30 @@ watch(
                   @click="toggleBook(book.id)"
                 >
                   <span class="spine-title">{{ book.title }}</span>
-                  <span class="spine-year">{{ book.year }}</span>
+                  <span class="spine-year">{{ book.year !== '' ? book.year : (book.topics[0] ?? '') }}</span>
                 </button>
               </div>
               <div class="plank"></div>
             </div>
           </div>
+          </section>
 
           <article v-if="openedBook" class="open-book">
             <div class="open-cover" :style="{ background: openedBook.spine }">
               <p class="open-kicker">{{ openedBook.proxy ? '占位书' : '资料' }}</p>
               <h3>{{ openedBook.title }}</h3>
-              <p>{{ openedBook.year }} · {{ openedBook.org }}</p>
+              <p v-if="openedBook.year !== '' || openedBook.org !== ''">
+                {{ [openedBook.year, openedBook.org].filter((part) => part !== '').join(' · ') }}
+              </p>
             </div>
             <div class="open-pages">
-              <p class="open-meta">{{ openedBook.docType }} · {{ openedBook.topics.join('、') || '未标注主题' }}</p>
+              <p class="open-meta">
+                {{
+                  [openedBook.docType, openedBook.topics.join('、')]
+                    .filter((part) => part !== '')
+                    .join(' · ') || '未标注'
+                }}
+              </p>
               <template v-if="openedBook.proxy">
                 <p>这是占位书，不是正式资料。</p>
                 <p>正式 PDF 入库后，这里可以预览和下载原文。</p>
@@ -694,6 +730,16 @@ watch(
   color: var(--el-text-color-secondary);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.tag-group + .tag-group {
+  margin-top: 18px;
+}
+
+.tag-heading {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--zw-green);
 }
 
 .bookcase {
