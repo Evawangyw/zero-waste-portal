@@ -1,12 +1,18 @@
 <script setup lang="ts">
 // 登录后的首页就是一轮一轮的对话。回答直接写在本页，并按账号保存历史。
 import { nextTick, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { SAMPLE_QUESTIONS } from '../constants'
-import { fetchChatHistory, saveChatTurn, streamAsk } from '../api/ask'
+import {
+  clearChatConversation,
+  fetchChatHistory,
+  saveChatTurn,
+  startChatConversation,
+  streamAsk,
+} from '../api/ask'
 import { fetchShelfTotal } from '../api/docs'
 import { ApiError } from '../api/http'
-import type { ChatMessage } from '../api/types'
+import type { ChatConversationSummary, ChatHistoryResponse, ChatMessage } from '../api/types'
 import { authToken, isLoggedIn } from '../composables/useAuth'
 import FoundationView from './FoundationView.vue'
 
@@ -14,11 +20,16 @@ interface TranscriptLine {
   id: string
   role: 'user' | 'assistant'
   content: string
+  thinking: string
 }
 
 const customQuestion = ref('')
 const libraryEmpty = ref(false)
 const sending = ref(false)
+const windowBusy = ref(false)
+const liveId = ref('')
+const conversationId = ref('')
+const conversations = ref<ChatConversationSummary[]>([])
 const messages = ref<TranscriptLine[]>([])
 const transcript = ref<HTMLElement | null>(null)
 
@@ -29,7 +40,11 @@ onMounted(() => {
 
 watch(isLoggedIn, (loggedIn) => {
   if (loggedIn) startMemberHome()
-  else messages.value = []
+  else {
+    messages.value = []
+    conversations.value = []
+    conversationId.value = ''
+  }
 })
 
 function startMemberHome(): void {
@@ -45,15 +60,62 @@ async function loadLibraryState(): Promise<void> {
   }
 }
 
-async function loadHistory(): Promise<void> {
+async function loadHistory(nextId?: string): Promise<void> {
   const token = authToken()
   if (token === null) return
   try {
-    const response = await fetchChatHistory(token)
-    messages.value = response.messages.map(toLine)
+    applyWindow(await fetchChatHistory(token, nextId))
     await scrollToEnd()
   } catch (err) {
     ElMessage.warning(err instanceof Error ? err.message : '历史对话加载失败')
+  }
+}
+
+function onSwitchConversation(value: string): void {
+  if (value === conversationId.value || sending.value || windowBusy.value) return
+  void loadHistory(value)
+}
+
+async function onNewConversation(): Promise<void> {
+  if (sending.value || windowBusy.value) return
+  if (messages.value.length === 0) {
+    ElMessage.info('当前已经是新对话')
+    return
+  }
+  const token = authToken()
+  if (token === null) return
+  windowBusy.value = true
+  try {
+    applyWindow(await startChatConversation(token))
+    customQuestion.value = ''
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '新对话没有打开')
+  } finally {
+    windowBusy.value = false
+  }
+}
+
+async function onClearConversation(): Promise<void> {
+  if (sending.value || windowBusy.value || messages.value.length === 0) return
+  const token = authToken()
+  if (token === null || conversationId.value === '') return
+  try {
+    await ElMessageBox.confirm('清空后，当前这一轮的提问会被删掉。其他对话还在。', '清空当前对话', {
+      confirmButtonText: '清空',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  windowBusy.value = true
+  try {
+    applyWindow(await clearChatConversation(token, conversationId.value))
+    customQuestion.value = ''
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '清空失败')
+  } finally {
+    windowBusy.value = false
   }
 }
 
@@ -80,8 +142,13 @@ async function submitQuestion(raw: string): Promise<void> {
   if (libraryEmpty.value) {
     messages.value = [
       ...messages.value,
-      { id: localId(), role: 'user', content: text },
-      { id: localId(), role: 'assistant', content: '库内暂未收录正式资料，所以不能回答。' },
+      { id: localId(), role: 'user', content: text, thinking: '' },
+      {
+        id: localId(),
+        role: 'assistant',
+        content: '库内暂未收录正式资料，所以不能回答。',
+        thinking: '',
+      },
     ]
     customQuestion.value = ''
     await scrollToEnd()
@@ -90,22 +157,30 @@ async function submitQuestion(raw: string): Promise<void> {
 
   customQuestion.value = ''
   const assistantId = localId()
+  liveId.value = assistantId
   messages.value = [
     ...messages.value,
-    { id: localId(), role: 'user', content: text },
-    { id: assistantId, role: 'assistant', content: '' },
+    { id: localId(), role: 'user', content: text, thinking: '' },
+    { id: assistantId, role: 'assistant', content: '', thinking: '' },
   ]
   sending.value = true
   await scrollToEnd()
   let persisted = false
   try {
-    await streamAsk(token, text, (chunk) => {
-      appendAnswer(assistantId, chunk)
-    })
+    await streamAsk(
+      token,
+      text,
+      (chunk) => {
+        appendAnswer(assistantId, chunk)
+      },
+      (chunk) => {
+        appendThinking(assistantId, chunk)
+      },
+    )
     const answer = readAnswer(assistantId)
     const saved = answer === '' ? '没有收到回答，请再试一次。' : answer
     if (answer === '') replaceAnswer(assistantId, saved)
-    await saveChatTurn(token, text, saved)
+    applyWindow(await saveChatTurn(token, text, saved, readThinking(assistantId), activeConversationId()))
     persisted = true
   } catch (err) {
     const message = err instanceof ApiError ? err.message : '回答中断，请再试一次'
@@ -114,7 +189,9 @@ async function submitQuestion(raw: string): Promise<void> {
     replaceAnswer(assistantId, shown)
     if (!persisted) {
       try {
-        await saveChatTurn(token, text, shown)
+        applyWindow(
+          await saveChatTurn(token, text, shown, readThinking(assistantId), activeConversationId()),
+        )
       } catch {
         // 这一轮先留在页面上；保存失败不盖住回答本身
       }
@@ -122,6 +199,7 @@ async function submitQuestion(raw: string): Promise<void> {
     ElMessage.error(message)
   } finally {
     sending.value = false
+    liveId.value = ''
     await scrollToEnd()
   }
 }
@@ -129,6 +207,13 @@ async function submitQuestion(raw: string): Promise<void> {
 function appendAnswer(id: string, chunk: string): void {
   messages.value = messages.value.map((line) =>
     line.id === id ? { ...line, content: line.content + chunk } : line,
+  )
+  void scrollToEnd()
+}
+
+function appendThinking(id: string, chunk: string): void {
+  messages.value = messages.value.map((line) =>
+    line.id === id ? { ...line, thinking: line.thinking + chunk } : line,
   )
   void scrollToEnd()
 }
@@ -141,8 +226,39 @@ function readAnswer(id: string): string {
   return messages.value.find((line) => line.id === id)?.content ?? ''
 }
 
+function readThinking(id: string): string {
+  return messages.value.find((line) => line.id === id)?.thinking ?? ''
+}
+
+function applyWindow(window: ChatHistoryResponse): void {
+  conversationId.value = window.conversation.id
+  conversations.value = [...window.conversations]
+  messages.value = window.messages.map(toLine)
+}
+
+function activeConversationId(): string | undefined {
+  return conversationId.value === '' ? undefined : conversationId.value
+}
+
+function conversationLabel(item: ChatConversationSummary): string {
+  const sameTitle = conversations.value.filter((row) => row.title === item.title).length
+  if (sameTitle < 2) return item.title
+  const time = new Date(item.updatedAt)
+  if (Number.isNaN(time.getTime())) return item.title
+  const month = time.getMonth() + 1
+  const day = time.getDate()
+  const hour = time.getHours().toString().padStart(2, '0')
+  const minute = time.getMinutes().toString().padStart(2, '0')
+  return `${item.title} · ${month}/${day} ${hour}:${minute}`
+}
+
 function toLine(message: ChatMessage): TranscriptLine {
-  return { id: message.id, role: message.role, content: message.content }
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    thinking: message.thinking ?? '',
+  }
 }
 
 function localId(): string {
@@ -160,11 +276,42 @@ async function scrollToEnd(): Promise<void> {
   <FoundationView v-if="!isLoggedIn" />
   <div v-else class="home">
     <el-card class="ask-card" shadow="never">
-      <template #header>向知识库提问</template>
+      <template #header>
+        <div class="ask-head">
+          <span>向知识库提问</span>
+          <div class="ask-actions">
+            <el-select
+              v-if="conversations.length > 1 || messages.length > 0"
+              :model-value="conversationId"
+              size="small"
+              class="conversation-select"
+              :disabled="sending || windowBusy"
+              @change="onSwitchConversation"
+            >
+              <el-option
+                v-for="item in conversations"
+                :key="item.id"
+                :label="conversationLabel(item)"
+                :value="item.id"
+              />
+            </el-select>
+            <el-button size="small" :disabled="sending || windowBusy" @click="onNewConversation">
+              新对话
+            </el-button>
+            <el-button
+              size="small"
+              :disabled="sending || windowBusy || messages.length === 0"
+              @click="onClearConversation"
+            >
+              清空
+            </el-button>
+          </div>
+        </div>
+      </template>
 
       <div ref="transcript" class="transcript">
         <p v-if="messages.length === 0" class="empty-hint">
-          直接输入问题，回答会留在这个页面上。刷新后仍能看到你自己的历史对话。
+          直接输入问题。新对话会另开一轮，以前的记录可以在上面切回去。清空只删掉当前这一轮。
         </p>
         <div
           v-for="line in messages"
@@ -173,7 +320,14 @@ async function scrollToEnd(): Promise<void> {
           :class="line.role === 'user' ? 'turn-user' : 'turn-assistant'"
         >
           <p class="role">{{ line.role === 'user' ? '我' : '助手' }}</p>
-          <p class="bubble">{{ line.content === '' ? '正在回答…' : line.content }}</p>
+          <div
+            v-if="line.role === 'assistant' && (line.thinking !== '' || (sending && line.id === liveId))"
+            class="thinking"
+          >
+            <p class="thinking-label">思考过程</p>
+            <p class="thinking-body">{{ line.thinking === '' ? '正在思考…' : line.thinking }}</p>
+          </div>
+          <p v-if="line.content !== ''" class="bubble">{{ line.content }}</p>
         </div>
       </div>
 
@@ -207,6 +361,27 @@ async function scrollToEnd(): Promise<void> {
 .home {
   display: flex;
   flex-direction: column;
+}
+
+.ask-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ask-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ask-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.conversation-select {
+  width: 180px;
 }
 
 .transcript {
@@ -267,6 +442,33 @@ async function scrollToEnd(): Promise<void> {
   background: #f7f7f5;
 }
 
+.thinking {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: #f3faf6;
+  border: 1px solid #d7eadf;
+  border-left: 3px solid #017c40;
+}
+
+.thinking-label {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #017c40;
+}
+
+.thinking-body {
+  margin: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #3d4a42;
+}
+
 .custom-ask {
   display: flex;
   gap: 12px;
@@ -286,9 +488,15 @@ async function scrollToEnd(): Promise<void> {
 }
 
 @media (max-width: 640px) {
+  .ask-head,
+  .ask-actions,
   .custom-ask {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .conversation-select {
+    width: 100%;
   }
 }
 </style>

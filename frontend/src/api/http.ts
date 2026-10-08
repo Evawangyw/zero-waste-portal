@@ -30,7 +30,7 @@ export class ApiError extends Error {
 }
 
 export interface RequestOptions {
-  readonly method?: 'GET' | 'POST'
+  readonly method?: 'GET' | 'POST' | 'DELETE'
   readonly query?: Readonly<Record<string, string | number | undefined>>
   readonly body?: unknown
   /** 登录态 JWT；传了就带 Authorization: Bearer */

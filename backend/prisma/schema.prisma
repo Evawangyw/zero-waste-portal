@@ -34,21 +34,43 @@ model User {
   downloads    DownloadLog[]
   submissions  Submission[]
   chatMessages ChatMessage[]
+  chatConversations ChatConversation[]
 
   @@map("users")
 }
 
+/// 登录用户的一轮提问窗口。新对话新开一行；清空只删这一窗里的消息。
+model ChatConversation {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 用第一句提问做标题；还没提问时是「新对话」
+  title     String        @default("新对话")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("chat_conversations")
+}
+
 /// 登录用户在首页的对话记录。一问一答各一行，按 createdAt 还原顺序。
 model ChatMessage {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 所属窗口。旧数据在第一次打开历史时补上
+  conversationId String?
+  conversation   ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   /// user | assistant
-  role      String
-  content   String
-  createdAt DateTime @default(now())
+  role           String
+  content        String
+  /// 助手这一轮的思考与工具调用；用户消息为空
+  thinking       String            @default("")
+  createdAt      DateTime          @default(now())
 
   @@index([userId, createdAt])
+  @@index([conversationId, createdAt])
   @@map("chat_messages")
 }
 
