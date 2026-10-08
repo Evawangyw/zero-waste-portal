@@ -3,31 +3,55 @@ import { ApiError, request } from './http'
 import type { ChatHistoryResponse, SaveChatTurnResponse } from './types'
 
 export interface AskDelta {
-  readonly type: 'answer' | 'done' | 'error'
+  readonly type: 'answer' | 'thinking' | 'done' | 'error'
   readonly content: string
 }
 
-export function fetchChatHistory(token: string): Promise<ChatHistoryResponse> {
-  return request<ChatHistoryResponse>('/chat/history', { token })
+export function fetchChatHistory(
+  token: string,
+  conversationId?: string,
+): Promise<ChatHistoryResponse> {
+  return request<ChatHistoryResponse>('/chat/history', {
+    token,
+    query: { conversationId },
+  })
 }
 
 export function saveChatTurn(
   token: string,
   question: string,
   answer: string,
+  thinking: string,
+  conversationId?: string,
 ): Promise<SaveChatTurnResponse> {
   return request<SaveChatTurnResponse>('/chat/history', {
     method: 'POST',
     token,
-    body: { question, answer },
+    body: { question, answer, thinking, conversationId },
   })
 }
 
-/** 读取 SSE。每收到一段回答正文就回调，结束或出错时返回。 */
+export function startChatConversation(token: string): Promise<ChatHistoryResponse> {
+  return request<ChatHistoryResponse>('/chat/conversations', { method: 'POST', token })
+}
+
+export function clearChatConversation(
+  token: string,
+  conversationId: string,
+): Promise<ChatHistoryResponse> {
+  return request<ChatHistoryResponse>('/chat/history', {
+    method: 'DELETE',
+    token,
+    body: { conversationId },
+  })
+}
+
+/** 读取 SSE。回答正文和思考过程分开回调。 */
 export async function streamAsk(
   token: string,
   query: string,
   onAnswer: (chunk: string) => void,
+  onThinking: (chunk: string) => void,
 ): Promise<void> {
   const response = await fetch('/api/ask', {
     method: 'POST',
@@ -36,7 +60,7 @@ export async function streamAsk(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, includeThinking: true }),
   })
   if (!response.ok) {
     const text = await response.text()
@@ -59,6 +83,7 @@ export async function streamAsk(
       const event = parseFrame(frame)
       if (event === null) continue
       if (event.type === 'answer' && event.content !== '') onAnswer(event.content)
+      if (event.type === 'thinking' && event.content !== '') onThinking(event.content)
       if (event.type === 'error') throw new ApiError(502, event.content || '回答失败')
     }
   }
@@ -77,7 +102,7 @@ function parseFrame(frame: string): AskDelta | null {
     if (typeof parsed !== 'object' || parsed === null) return null
     const record = parsed as { readonly type?: unknown; readonly content?: unknown }
     const type = record.type
-    if (type !== 'answer' && type !== 'done' && type !== 'error') return null
+    if (type !== 'answer' && type !== 'thinking' && type !== 'done' && type !== 'error') return null
     return { type, content: typeof record.content === 'string' ? record.content : '' }
   } catch {
     return null

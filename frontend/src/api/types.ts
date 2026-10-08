@@ -46,16 +46,28 @@ export interface ChatMessage {
   readonly id: string
   readonly role: 'user' | 'assistant'
   readonly content: string
+  /** 助手的思考与工具调用；用户消息为空，旧记录可能没有这个字段 */
+  readonly thinking?: string
   readonly createdAt: string
+}
+
+export interface ChatConversationSummary {
+  readonly id: string
+  readonly title: string
+  readonly updatedAt: string
 }
 
 export interface ChatHistoryResponse {
   readonly success: true
+  readonly conversation: ChatConversationSummary
+  readonly conversations: readonly ChatConversationSummary[]
   readonly messages: readonly ChatMessage[]
 }
 
 export interface SaveChatTurnResponse {
   readonly success: true
+  readonly conversation: ChatConversationSummary
+  readonly conversations: readonly ChatConversationSummary[]
   readonly messages: readonly ChatMessage[]
 }
 
