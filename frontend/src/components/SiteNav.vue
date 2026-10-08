@@ -19,7 +19,7 @@ const isAdmin = computed(() => currentUser.value?.isAdmin === true)
 function onLogout(): void {
   clearAuth()
   ElMessage.success('已退出登录')
-  void router.push('/')
+  void router.push({ name: 'intro' })
 }
 
 function goAuth(): void {
@@ -49,7 +49,6 @@ void authToken
 
       <nav class="nav-links">
         <router-link to="/" :class="{ active: isActive('/') }">首页</router-link>
-        <router-link to="/intro" :class="{ active: isActive('/intro') }">知识库介绍</router-link>
         <router-link v-if="isLoggedIn" to="/foundation" :class="{ active: isActive('/foundation') }">
           基金会
         </router-link>

@@ -1,10 +1,9 @@
 // 前端路由（T05）。公众页 + 兜底 404，全部懒加载之外的直接引入（本项目页面少，直接引入更利于排障）。
 //
-// 登录守卫：书架和资料详情需要登录。未登录访问会去登录页，并带 redirect 回来。
+// 未登录打开首页会去知识库介绍。书架、资料详情和基金会介绍需要登录。
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { restoreAuth } from '../composables/useAuth'
-import { hasSeenIntro, safeInternalPath } from '../composables/useIntroGate'
 import { trackPageView } from '../composables/useTracking'
 import HomeView from '../views/HomeView.vue'
 import FoundationView from '../views/FoundationView.vue'
@@ -21,7 +20,7 @@ const routes: readonly RouteRecordRaw[] = [
     path: '/foundation',
     name: 'foundation',
     component: FoundationView,
-    meta: { title: '基金会介绍' },
+    meta: { title: '基金会介绍', requiresAuth: true },
   },
   {
     path: '/shelf',
@@ -73,39 +72,17 @@ export const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-function guestNeedsIntro(toPathName: string | symbol | undefined | null): boolean {
-  return toPathName === 'home' || toPathName === 'auth'
-}
-
-/** 未登录、本会话还没看过介绍时，先去介绍页，并带上原本要去的登录回跳。 */
-function introRedirect(
-  next: '/' | '/auth',
-  redirect: string | undefined,
-): { name: 'intro'; query: Record<string, string> } {
-  const query: Record<string, string> = { next }
-  if (redirect !== undefined && redirect !== '') query['redirect'] = redirect
-  return { name: 'intro', query }
-}
-
 router.beforeEach(async (to) => {
-  if (to.name === 'intro') return true
-  if (to.query['skipIntro'] === '1') return true
-
-  if (to.meta['requiresAuth'] === true) {
-    const loggedIn = await restoreAuth()
-    if (loggedIn) return true
-    if (!hasSeenIntro()) return introRedirect('/auth', to.fullPath)
-    return { path: '/auth', query: { redirect: to.fullPath } }
-  }
-
-  if (!guestNeedsIntro(to.name)) return true
   const loggedIn = await restoreAuth()
-  if (loggedIn || hasSeenIntro()) return true
-  const next = to.name === 'auth' ? '/auth' : '/'
-  const redirectQuery = to.query['redirect']
-  const redirect =
-    redirectQuery === undefined ? undefined : safeInternalPath(redirectQuery, '')
-  return introRedirect(next, redirect === '' ? undefined : redirect)
+
+  // 知识库介绍只给未登录的人。已登录再打开 /intro，回到对话首页。
+  if (loggedIn && to.name === 'intro') return { path: '/' }
+  // 未登录的首页就是知识库介绍，不先看基金会。
+  if (!loggedIn && to.name === 'home') return { name: 'intro' }
+
+  if (to.meta['requiresAuth'] !== true) return true
+  if (loggedIn) return true
+  return { path: '/auth', query: { redirect: to.fullPath } }
 })
 
 router.afterEach((to, from) => {

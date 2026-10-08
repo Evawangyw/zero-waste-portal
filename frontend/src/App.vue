@@ -2,18 +2,26 @@
 // 应用外壳（T05）：导航条 + 路由出口 + 全局挂件初始化。
 // 挂件是**全站**常驻（首页/书架/详情都有"试试问 AI"入口），故在 App.vue 统一初始化一次。
 import { computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import SiteNav from './components/SiteNav.vue'
 import { dismissWidget, flushPendingQuery, mountWidget } from './composables/useWidget'
 import { isLoggedIn, restoreAuth } from './composables/useAuth'
 import { APP_NAME } from './constants'
 
 const route = useRoute()
+const router = useRouter()
 const bare = computed(() => route.meta['bare'] === true)
 
 onMounted(() => {
   // 登录态恢复：有 token 才拉 /me，失败不打断页面
   void restoreAuth()
+})
+
+// 人已经在首页时退出，路由不会重新进入守卫，这里补一次，回到知识库介绍。
+watch(isLoggedIn, (loggedIn) => {
+  if (!loggedIn && route.name === 'home') {
+    void router.replace({ name: 'intro' })
+  }
 })
 
 // AI 问答挂件只在登录后出现。登出立刻拆掉，避免未登录访客还能点右下角提问。
@@ -47,8 +55,7 @@ watch(
         </div>
         <nav class="footer-links">
           <router-link to="/">首页</router-link>
-          <router-link to="/intro">知识库介绍</router-link>
-          <router-link to="/foundation">基金会介绍</router-link>
+          <router-link v-if="isLoggedIn" to="/foundation">基金会介绍</router-link>
           <router-link v-if="isLoggedIn" to="/shelf">资料书架</router-link>
           <a href="https://www.lcx-foundation.org.cn/" target="_blank" rel="noopener noreferrer">
             基金会官网
