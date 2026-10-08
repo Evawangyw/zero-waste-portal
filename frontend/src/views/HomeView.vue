@@ -14,7 +14,6 @@ import { fetchShelfTotal } from '../api/docs'
 import { ApiError } from '../api/http'
 import type { ChatConversationSummary, ChatHistoryResponse, ChatMessage } from '../api/types'
 import { authToken, isLoggedIn } from '../composables/useAuth'
-import FoundationView from './FoundationView.vue'
 
 interface TranscriptLine {
   id: string
@@ -273,8 +272,7 @@ async function scrollToEnd(): Promise<void> {
 </script>
 
 <template>
-  <FoundationView v-if="!isLoggedIn" />
-  <div v-else class="home">
+  <div v-if="isLoggedIn" class="home">
     <el-card class="ask-card" shadow="never">
       <template #header>
         <div class="ask-head">

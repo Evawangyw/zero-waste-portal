@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 注册前的知识库介绍。数据来自 content/knowledge-overview.ts（钉钉「知识总览」快照）。
-// 未登录第一次进首页或登录页时，路由会先送到这里；看完或跳过之后，本会话不再自动播放。
+// 未登录时的首页。数据来自 content/knowledge-overview.ts（钉钉「知识总览」快照）。
+// 登录后路由不会再进入这一页。
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -14,7 +14,7 @@ import {
   shareLabel,
 } from '../content/knowledge-overview'
 import { isLoggedIn } from '../composables/useAuth'
-import { markIntroSeen, safeInternalPath } from '../composables/useIntroGate'
+import { safeInternalPath } from '../composables/useIntroGate'
 
 const SCENES = [
   { id: 'open', label: '开场' },
@@ -50,7 +50,6 @@ const redirectPath = computed(() => {
   if (route.query['redirect'] === undefined) return ''
   return safeInternalPath(route.query['redirect'], '')
 })
-const cameForAuth = computed(() => safeInternalPath(route.query['next'], '/') === '/auth')
 
 if (reducedMotion) autoplay.value = false
 
@@ -113,13 +112,12 @@ function playTotals(): void {
 }
 
 function authLocation(tab: 'login' | 'register'): { path: string; query: Record<string, string> } {
-  const query: Record<string, string> = { from: 'intro', tab, skipIntro: '1' }
+  const query: Record<string, string> = { from: 'intro', tab }
   if (redirectPath.value !== '') query['redirect'] = redirectPath.value
   return { path: '/auth', query }
 }
 
 function goRegister(): void {
-  markIntroSeen()
   if (isLoggedIn.value) {
     void router.push('/')
     return
@@ -128,7 +126,6 @@ function goRegister(): void {
 }
 
 function goLogin(): void {
-  markIntroSeen()
   if (isLoggedIn.value) {
     void router.push('/')
     return
@@ -136,14 +133,8 @@ function goLogin(): void {
   void router.push(authLocation('login'))
 }
 
-function goHome(): void {
-  markIntroSeen()
-  void router.push('/')
-}
-
 function skip(): void {
-  if (cameForAuth.value) goLogin()
-  else goHome()
+  goLogin()
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -314,7 +305,6 @@ onBeforeUnmount(() => {
           <button v-if="!isLoggedIn" type="button" class="btn btn-ghost" @click="goLogin">
             已有账号，登录
           </button>
-          <button type="button" class="btn btn-ghost" @click="goHome">先看基金会</button>
         </div>
       </section>
     </Transition>

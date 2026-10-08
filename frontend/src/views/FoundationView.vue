@@ -49,8 +49,8 @@ function openExternal(url: string): void {
         <router-link v-if="isLoggedIn" to="/">
           <el-button type="primary">进入知识库</el-button>
         </router-link>
-        <router-link v-else to="/intro">
-          <el-button type="primary">先看知识库里有什么</el-button>
+        <router-link v-else to="/auth">
+          <el-button type="primary">登录后使用知识库</el-button>
         </router-link>
         <el-button plain @click="openExternal('https://www.lcx-foundation.org.cn/h-col-159.html')">
           查看官网零废弃专栏
