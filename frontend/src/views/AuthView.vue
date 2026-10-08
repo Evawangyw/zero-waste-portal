@@ -8,6 +8,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { authErrorCode, fieldIssues, login as apiLogin, register as apiRegister } from '../api/auth'
 import { ApiError } from '../api/http'
 import type { RegisterBody } from '../api/types'
+import { CHEMICAL_TOTAL, ZERO_WASTE_TOTAL } from '../content/knowledge-overview'
 import { TOPIC_OPTIONS } from '../constants'
 import { setAuth } from '../composables/useAuth'
 import { trackRegister } from '../composables/useTracking'
@@ -16,7 +17,15 @@ const route = useRoute()
 const router = useRouter()
 
 type TabName = 'login' | 'register'
-const activeTab = ref<TabName>('login')
+
+function readTab(): TabName {
+  const value = route.query['tab']
+  const first = Array.isArray(value) ? value[0] : value
+  return first === 'register' ? 'register' : 'login'
+}
+
+const activeTab = ref<TabName>(readTab())
+const fromIntro = computed(() => route.query['from'] === 'intro')
 
 const loginFormRef = ref<FormInstance>()
 const registerFormRef = ref<FormInstance>()
@@ -221,7 +230,11 @@ function errorFor(field: string): string {
   <div class="auth-page">
     <el-card shadow="never" class="auth-card">
       <h1 class="auth-title">登录 / 注册</h1>
-      <p class="auth-sub">登录后可以查看资料书架，并向 AI 提问。</p>
+      <p v-if="fromIntro" class="auth-sub">
+        零废弃 {{ ZERO_WASTE_TOTAL }} 条，化学品 {{ CHEMICAL_TOTAL }} 条。注册后可以翻书架，也可以向 AI
+        提问。
+      </p>
+      <p v-else class="auth-sub">登录后可以查看资料书架，并向 AI 提问。</p>
 
       <el-tabs v-model="activeTab">
         <!-- ------------------------------------------------------ 登录 -->

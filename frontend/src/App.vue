@@ -1,11 +1,15 @@
 <script setup lang="ts">
 // 应用外壳（T05）：导航条 + 路由出口 + 全局挂件初始化。
 // 挂件是**全站**常驻（首页/书架/详情都有"试试问 AI"入口），故在 App.vue 统一初始化一次。
-import { onMounted, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import SiteNav from './components/SiteNav.vue'
 import { dismissWidget, flushPendingQuery, mountWidget } from './composables/useWidget'
 import { isLoggedIn, restoreAuth } from './composables/useAuth'
 import { APP_NAME } from './constants'
+
+const route = useRoute()
+const bare = computed(() => route.meta['bare'] === true)
 
 onMounted(() => {
   // 登录态恢复：有 token 才拉 /me，失败不打断页面
@@ -14,9 +18,9 @@ onMounted(() => {
 
 // AI 问答挂件只在登录后出现。登出立刻拆掉，避免未登录访客还能点右下角提问。
 watch(
-  isLoggedIn,
-  (loggedIn) => {
-    if (loggedIn) {
+  [isLoggedIn, bare],
+  ([loggedIn, isBare]) => {
+    if (loggedIn && !isBare) {
       void mountWidget().then(() => {
         flushPendingQuery()
       })
@@ -30,11 +34,11 @@ watch(
 
 <template>
   <el-container class="app-shell">
-    <SiteNav />
-    <el-main class="app-main">
+    <SiteNav v-if="!bare" />
+    <el-main class="app-main" :class="{ 'app-main-bare': bare }">
       <router-view />
     </el-main>
-    <el-footer class="app-footer" height="auto">
+    <el-footer v-if="!bare" class="app-footer" height="auto">
       <div class="footer-inner">
         <div>
           <p class="footer-name">{{ APP_NAME }}</p>
@@ -43,6 +47,7 @@ watch(
         </div>
         <nav class="footer-links">
           <router-link to="/">首页</router-link>
+          <router-link to="/intro">知识库介绍</router-link>
           <router-link to="/foundation">基金会介绍</router-link>
           <router-link v-if="isLoggedIn" to="/shelf">资料书架</router-link>
           <a href="https://www.lcx-foundation.org.cn/" target="_blank" rel="noopener noreferrer">
@@ -75,6 +80,12 @@ watch(
   margin: 0 auto;
   padding: 28px 16px 48px;
   box-sizing: border-box;
+}
+
+.app-main-bare {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .app-footer {

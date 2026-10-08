@@ -4,12 +4,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { restoreAuth } from '../composables/useAuth'
+import { hasSeenIntro, safeInternalPath } from '../composables/useIntroGate'
 import { trackPageView } from '../composables/useTracking'
 import HomeView from '../views/HomeView.vue'
 import FoundationView from '../views/FoundationView.vue'
 import ShelfView from '../views/ShelfView.vue'
 import DocDetailView from '../views/DocDetailView.vue'
 import AuthView from '../views/AuthView.vue'
+import IntroView from '../views/IntroView.vue'
 import AdminStatsView from '../views/AdminStatsView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 
@@ -42,6 +44,13 @@ const routes: readonly RouteRecordRaw[] = [
     props: true,
   },
   {
+    // 注册前的知识库介绍。meta.bare 让外壳藏起顶栏和页脚，整屏播放。
+    path: '/intro',
+    name: 'intro',
+    component: IntroView,
+    meta: { title: '知识库介绍', bare: true },
+  },
+  {
     // T08lite 管理统计最简页。meta.requiresAdmin 只是**声明式标记**：
     // 本页不在路由层放守卫 —— 卡片要求非管理员访问时「看到权限提示页」而不是被重定向，
     // 所以权限判定放在 AdminStatsView 内部（校验中/未登录/非管理员 三态各自提示）。
@@ -64,11 +73,39 @@ export const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
+function guestNeedsIntro(toPathName: string | symbol | undefined | null): boolean {
+  return toPathName === 'home' || toPathName === 'auth'
+}
+
+/** 未登录、本会话还没看过介绍时，先去介绍页，并带上原本要去的登录回跳。 */
+function introRedirect(
+  next: '/' | '/auth',
+  redirect: string | undefined,
+): { name: 'intro'; query: Record<string, string> } {
+  const query: Record<string, string> = { next }
+  if (redirect !== undefined && redirect !== '') query['redirect'] = redirect
+  return { name: 'intro', query }
+}
+
 router.beforeEach(async (to) => {
-  if (to.meta['requiresAuth'] !== true) return true
+  if (to.name === 'intro') return true
+  if (to.query['skipIntro'] === '1') return true
+
+  if (to.meta['requiresAuth'] === true) {
+    const loggedIn = await restoreAuth()
+    if (loggedIn) return true
+    if (!hasSeenIntro()) return introRedirect('/auth', to.fullPath)
+    return { path: '/auth', query: { redirect: to.fullPath } }
+  }
+
+  if (!guestNeedsIntro(to.name)) return true
   const loggedIn = await restoreAuth()
-  if (loggedIn) return true
-  return { path: '/auth', query: { redirect: to.fullPath } }
+  if (loggedIn || hasSeenIntro()) return true
+  const next = to.name === 'auth' ? '/auth' : '/'
+  const redirectQuery = to.query['redirect']
+  const redirect =
+    redirectQuery === undefined ? undefined : safeInternalPath(redirectQuery, '')
+  return introRedirect(next, redirect === '' ? undefined : redirect)
 })
 
 router.afterEach((to, from) => {
