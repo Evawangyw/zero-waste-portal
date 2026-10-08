@@ -210,7 +210,14 @@ async function main(): Promise<void> {
       reconstructRequestOrigin({
         protocol: 'http',
         headers: { host: 'localhost:5173' },
-      }) === 'http://localhost:5173',
+      }) === 'http://localhost:5173' &&
+        reconstructRequestOrigin({
+          protocol: 'http',
+          headers: {
+            host: 'demo.trycloudflare.com',
+            'x-forwarded-proto': 'https',
+          },
+        }) === 'https://demo.trycloudflare.com',
       'ok',
     )
 
