@@ -41,6 +41,24 @@ export interface PublicUser {
   readonly createdAt: string
 }
 
+/** 首页对话里的一条消息 */
+export interface ChatMessage {
+  readonly id: string
+  readonly role: 'user' | 'assistant'
+  readonly content: string
+  readonly createdAt: string
+}
+
+export interface ChatHistoryResponse {
+  readonly success: true
+  readonly messages: readonly ChatMessage[]
+}
+
+export interface SaveChatTurnResponse {
+  readonly success: true
+  readonly messages: readonly ChatMessage[]
+}
+
 export interface RegisterBody {
   readonly name: string
   readonly org: string

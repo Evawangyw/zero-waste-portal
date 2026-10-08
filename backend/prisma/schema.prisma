@@ -33,8 +33,23 @@ model User {
   questions    QuestionLog[]
   downloads    DownloadLog[]
   submissions  Submission[]
+  chatMessages ChatMessage[]
 
   @@map("users")
+}
+
+/// 登录用户在首页的对话记录。一问一答各一行，按 createdAt 还原顺序。
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// user | assistant
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("chat_messages")
 }
 
 /// 提问日志（看板：提问趋势 / 无答案率 / 热词）

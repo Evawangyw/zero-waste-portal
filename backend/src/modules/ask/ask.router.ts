@@ -3,8 +3,11 @@
 // 实现：只经 weknora 对接层；会话 id 服务端持有，不外泄。
 import { Router } from 'express'
 import type { Request, Response } from 'express'
+import { getAuthContext, requireAuth } from '../auth/index.js'
+import type { AuthLocals, AuthRequest } from '../auth/index.js'
 import { WeKnoraClient, WeKnoraError, isTerminalEvent } from '../../weknora/index.js'
 import type { AskEvent } from '../../weknora/index.js'
+import { listChatHistory, saveChatTurn } from './ask.history.js'
 import type { AskRequestBody, AskStreamEvent } from './ask.types.js'
 
 /** 单次提问最大长度（防超长 query 打爆模型额度） */
@@ -12,8 +15,18 @@ const MAX_QUERY_LEN = 500
 
 export const askRouter: Router = Router()
 
+type AuthResponse = Response<unknown, AuthLocals>
+
 askRouter.post('/api/ask', (req: Request, res: Response) => {
   void handleAsk(req, res)
+})
+
+askRouter.get('/api/chat/history', requireAuth, (_req: AuthRequest, res: AuthResponse) => {
+  void handleHistory(res)
+})
+
+askRouter.post('/api/chat/history', requireAuth, (req: AuthRequest, res: AuthResponse) => {
+  void handleSaveTurn(req, res)
 })
 
 async function handleAsk(req: Request, res: Response): Promise<void> {
@@ -130,6 +143,41 @@ function parseAskBody(raw: unknown): AskRequestBody | null {
       : undefined,
     includeThinking: obj['includeThinking'] === true,
   }
+}
+
+async function handleHistory(res: AuthResponse): Promise<void> {
+  const auth = getAuthContext(res)
+  if (auth === null) {
+    res.status(401).json({ success: false, error: { message: '请先登录后再查看对话' } })
+    return
+  }
+  const messages = await listChatHistory(auth.userId)
+  res.status(200).json({ success: true, messages })
+}
+
+async function handleSaveTurn(req: AuthRequest, res: AuthResponse): Promise<void> {
+  const auth = getAuthContext(res)
+  if (auth === null) {
+    res.status(401).json({ success: false, error: { message: '请先登录后再保存对话' } })
+    return
+  }
+  const turn = parseTurn(req.body)
+  if (turn === null) {
+    res.status(400).json({ success: false, error: { message: '需要 question 和 answer 两个文本字段' } })
+    return
+  }
+  const messages = await saveChatTurn(auth.userId, turn.question, turn.answer)
+  res.status(201).json({ success: true, messages })
+}
+
+function parseTurn(raw: unknown): { readonly question: string; readonly answer: string } | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const obj = raw as Record<string, unknown>
+  const question = obj['question']
+  const answer = obj['answer']
+  if (typeof question !== 'string' || question.trim() === '') return null
+  if (typeof answer !== 'string' || answer.trim() === '') return null
+  return { question: question.trim(), answer: answer.trim() }
 }
 
 function statusFor(kind: WeKnoraError['kind']): number {
