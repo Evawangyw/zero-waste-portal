@@ -131,7 +131,12 @@ export function parseTrackItem(raw: unknown, index: number): ItemParse {
       sessionId: readTruncatedString(raw['sessionId'], TRACK_MAX_SESSION_ID_CHARS) ?? '',
       path: readTruncatedString(raw['path'], TRACK_MAX_PATH_CHARS) ?? '',
       payload: serialized,
-      term: event === 'search' ? readTerm(payload['term']) : '',
+      term:
+        event === 'search'
+          ? readTerm(payload['term'])
+          : event === 'ai_ask'
+            ? readTerm(payload['question'])
+            : '',
       noAnswer: event === 'ai_ask' ? judgeNoAnswer(payload) : null,
       zeroResult: event === 'search' && payload['zeroResult'] === true,
     },
