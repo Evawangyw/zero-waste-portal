@@ -67,15 +67,30 @@ export function isSameOriginBrowserFetch(req: {
   return typeof site === 'string' && site.toLowerCase() === 'same-origin'
 }
 
-/** 由请求本身还原本站 Origin（协议 + Host），供上面的同源豁免比对白名单 */
+/**
+ * 由请求本身还原本站 Origin（协议 + Host），供上面的同源豁免比对白名单。
+ * 公网隧道在 Vite 前面终结 HTTPS，转到后端的这一跳是 HTTP，所以 req.protocol 会是 http。
+ * 这时改用代理附带的 X-Forwarded-Proto，才能还原成浏览器真正的 https 来源。
+ */
 export function reconstructRequestOrigin(req: {
   readonly protocol: string
   readonly headers: Record<string, unknown>
 }): string | undefined {
   const host = req.headers.host
   if (typeof host !== 'string' || host.trim() === '') return undefined
-  const protocol = typeof req.protocol === 'string' ? req.protocol : 'http'
+  const forwarded = readForwardedProtocol(req.headers['x-forwarded-proto'])
+  const protocol =
+    forwarded ?? (typeof req.protocol === 'string' && req.protocol !== '' ? req.protocol : 'http')
   return `${protocol}://${host.trim()}`
+}
+
+/** 只接受 http / https，取逗号分隔的第一段，避免把任意字符串拼进 Origin */
+function readForwardedProtocol(raw: unknown): string | undefined {
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (typeof value !== 'string') return undefined
+  const first = value.split(',')[0]?.trim().toLowerCase()
+  if (first === 'http' || first === 'https') return first
+  return undefined
 }
 
 /**
