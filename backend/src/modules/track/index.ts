@@ -30,7 +30,12 @@ export {
 export type { AnswerEvidence } from './track.answer.js'
 
 // ---- 落库与聚合（P2 看板/验收脚本按需直接调）
-export { countEventsBySession, deleteEventsBySession, insertTrackEvents } from './track.repo.js'
+export {
+  completeAskEvent,
+  countEventsBySession,
+  deleteEventsBySession,
+  insertTrackEvents,
+} from './track.repo.js'
 export { STATS_TOP_LIMIT, buildStatsSummary, toAsksSummary, toEventCounts } from './track.stats.js'
 
 // ---- 类型与常量

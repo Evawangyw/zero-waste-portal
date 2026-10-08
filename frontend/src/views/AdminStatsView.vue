@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 管理统计：管理员在网页上直接看使用情况，并点进书架或资料核对。
-// 数据仍只来自 GET /api/admin/stats/summary，不改后端字段。
+// 数据来自 GET /api/admin/stats/summary。提问结果用回写后的判定，高频提问用 topAskTerms。
 // 权限判定留在视图内：校验中 → 未登录 → 非管理员，三态各自给对应提示。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -82,9 +82,14 @@ const askChart = computed<EChartsCoreOption>(() => ({
   ],
 }))
 
-const searchChart = computed(() =>
-  rankedBar(summary.value?.topSearchTerms.map((row) => ({ name: row.term, value: row.count })) ?? []),
+const askTermChart = computed(() =>
+  rankedBar(
+    summary.value?.topAskTerms.map((row) => ({ name: row.term, value: row.count })) ?? [],
+    280,
+  ),
 )
+
+const searchChart = computed(() => searchHeatmap(summary.value?.topSearchTerms ?? []))
 
 const downloadChart = computed(() =>
   rankedBar(
@@ -92,15 +97,9 @@ const downloadChart = computed(() =>
   ),
 )
 
-const gapChart = computed(() =>
-  rankedBar(
-    summary.value?.zeroResultSearchTerms.map((row) => ({ name: row.term, value: row.count })) ?? [],
-  ),
-)
-
-const searchHeight = computed(() => chartHeight(summary.value?.topSearchTerms.length ?? 0))
+const askTermHeight = computed(() => chartHeight(summary.value?.topAskTerms.length ?? 0))
+const searchHeight = computed(() => heatmapHeight(summary.value?.topSearchTerms.length ?? 0))
 const downloadHeight = computed(() => chartHeight(summary.value?.topDownloads.length ?? 0))
-const gapHeight = computed(() => chartHeight(summary.value?.zeroResultSearchTerms.length ?? 0))
 
 // ---------------------------------------------------------------- 取数
 
@@ -157,16 +156,117 @@ function chartHeight(count: number): number {
   return Math.max(220, count * 36)
 }
 
-function rankedBar(rows: readonly { readonly name: string; readonly value: number }[]): EChartsCoreOption {
+/** 热词按网格铺开，一行最多 5 个，高度跟着行数走。 */
+function heatmapHeight(count: number): number {
+  if (count <= 0) return 220
+  const cols = Math.min(5, count)
+  const rows = Math.ceil(count / cols)
+  return rows * 76 + 16
+}
+
+function searchHeatmap(
+  rows: readonly { readonly term: string; readonly count: number }[],
+): EChartsCoreOption {
+  const cols = Math.min(5, Math.max(rows.length, 1))
+  const rowCount = Math.max(1, Math.ceil(rows.length / cols))
+  const max = rows.reduce((highest, row) => Math.max(highest, row.count), 1)
+  return {
+    tooltip: {
+      formatter(raw: unknown): string {
+        const name = readHeatName(raw)
+        const count = readHeatCount(raw)
+        return name === '' ? '' : `${name}<br/>检索 ${count} 次`
+      },
+    },
+    grid: { left: 8, right: 64, top: 8, bottom: 8 },
+    xAxis: {
+      type: 'category',
+      data: axisLabels(cols),
+      show: false,
+    },
+    yAxis: {
+      type: 'category',
+      data: axisLabels(rowCount),
+      inverse: true,
+      show: false,
+    },
+    visualMap: {
+      min: 0,
+      max,
+      calculable: false,
+      orient: 'vertical',
+      right: 0,
+      top: 'middle',
+      itemWidth: 10,
+      itemHeight: 72,
+      text: ['高', '低'],
+      textStyle: { color: INK, fontSize: 12 },
+      inRange: { color: ['#e7f3ec', '#017c40'] },
+    },
+    series: [
+      {
+        type: 'heatmap',
+        data: rows.map((row, index) => ({
+          value: [index % cols, Math.floor(index / cols), row.count],
+          name: row.term,
+        })),
+        label: {
+          show: true,
+          formatter(raw: unknown): string {
+            const name = readHeatName(raw)
+            const count = readHeatCount(raw)
+            const short = name.length > 6 ? `${name.slice(0, 6)}…` : name
+            const tone = count / max >= 0.55 ? 'onDark' : 'onLight'
+            return `{${tone}|${short}\n${count}}`
+          },
+          rich: {
+            onDark: { color: '#ffffff', fontSize: 12, align: 'center', lineHeight: 18 },
+            onLight: { color: '#123524', fontSize: 12, align: 'center', lineHeight: 18 },
+          },
+        },
+        itemStyle: { borderColor: '#ffffff', borderWidth: 6 },
+        emphasis: { itemStyle: { shadowBlur: 8, shadowColor: 'rgba(1, 124, 64, 0.25)' } },
+      },
+    ],
+  }
+}
+
+function axisLabels(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => String(index))
+}
+
+function readHeatName(raw: unknown): string {
+  if (typeof raw !== 'object' || raw === null || !('name' in raw)) return ''
+  return typeof raw.name === 'string' ? raw.name : ''
+}
+
+function readHeatCount(raw: unknown): number {
+  if (typeof raw !== 'object' || raw === null || !('value' in raw)) return 0
+  const value = raw.value
+  if (!Array.isArray(value)) return 0
+  const count = value[2]
+  return typeof count === 'number' ? count : 0
+}
+
+function rankedBar(
+  rows: readonly { readonly name: string; readonly value: number }[],
+  labelWidth = 160,
+): EChartsCoreOption {
   const ordered = [...rows].reverse()
   return barOption(
     ordered.map((row) => row.name),
     ordered.map((row) => row.value),
     true,
+    labelWidth,
   )
 }
 
-function barOption(categories: string[], values: number[], horizontal: boolean): EChartsCoreOption {
+function barOption(
+  categories: string[],
+  values: number[],
+  horizontal: boolean,
+  labelWidth = 160,
+): EChartsCoreOption {
   return {
     color: [GREEN],
     tooltip: { trigger: 'axis' },
@@ -182,7 +282,7 @@ function barOption(categories: string[], values: number[], horizontal: boolean):
       ? {
           type: 'category',
           data: categories,
-          axisLabel: { color: INK, width: 160, overflow: 'truncate' },
+          axisLabel: { color: INK, width: labelWidth, overflow: 'truncate' },
         }
       : { type: 'value', min: 0, minInterval: 1, axisLabel: { color: INK } },
     series: [
@@ -339,6 +439,16 @@ onUnmounted(() => {
           </el-col>
         </el-row>
 
+        <el-card shadow="never" class="block">
+          <template #header><span class="block-title">高频提问</span></template>
+          <StatsChart
+            v-if="(summary.topAskTerms?.length ?? 0) > 0"
+            :option="askTermChart"
+            :height="askTermHeight"
+          />
+          <el-empty v-else description="还没有提问" />
+        </el-card>
+
         <el-row :gutter="16" class="block-row">
           <el-col :xs="24" :md="12">
             <el-card shadow="never" class="block">
@@ -366,16 +476,6 @@ onUnmounted(() => {
           </el-col>
         </el-row>
 
-        <el-card shadow="never" class="block">
-          <template #header><span class="block-title">搜过但没有结果</span></template>
-          <StatsChart
-            v-if="summary.zeroResultSearchTerms.length > 0"
-            :option="gapChart"
-            :height="gapHeight"
-            @select="openShelf"
-          />
-          <el-empty v-else description="目前的检索都能找到资料" />
-        </el-card>
       </template>
     </template>
   </div>

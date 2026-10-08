@@ -148,6 +148,8 @@ export interface StatsSummaryResponse {
   readonly events: Readonly<Record<TrackEvent, number>>
   readonly topSearchTerms: readonly SearchTermCount[]
   readonly zeroResultSearchTerms: readonly SearchTermCount[]
+  /** 提问原文 Top10（ai_ask 的 term；历史行没有 term 时从 payload.question 回退） */
+  readonly topAskTerms: readonly SearchTermCount[]
   /** 下载 Top10（权威口径 = T04 的 download_logs） */
   readonly topDownloads: readonly DownloadTopItem[]
   readonly downloads: {

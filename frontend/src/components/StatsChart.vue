@@ -2,11 +2,20 @@
 // 管理统计页的图表。只负责把 option 画出来，并在点击柱子或扇区时把名称交回页面。
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { init, use, type ECharts, type EChartsCoreOption } from 'echarts/core'
-import { BarChart, PieChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import { BarChart, HeatmapChart, PieChart } from 'echarts/charts'
+import { GridComponent, LegendComponent, TooltipComponent, VisualMapComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
-use([BarChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+use([
+  BarChart,
+  HeatmapChart,
+  PieChart,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+  VisualMapComponent,
+  CanvasRenderer,
+])
 
 const props = withDefaults(
   defineProps<{
@@ -25,8 +34,13 @@ let chart: ECharts | null = null
 let observer: ResizeObserver | null = null
 
 function readName(raw: unknown): string {
-  if (typeof raw !== 'object' || raw === null || !('name' in raw)) return ''
-  return typeof raw.name === 'string' ? raw.name : ''
+  if (typeof raw !== 'object' || raw === null) return ''
+  const record = raw as { readonly name?: unknown; readonly data?: unknown }
+  if (typeof record.data === 'object' && record.data !== null && 'name' in record.data) {
+    const dataName = (record.data as { readonly name?: unknown }).name
+    if (typeof dataName === 'string' && dataName !== '') return dataName
+  }
+  return typeof record.name === 'string' ? record.name : ''
 }
 
 function render(): void {

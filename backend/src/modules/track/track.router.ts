@@ -17,7 +17,7 @@ import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { getPrisma } from '../../db/prisma.js'
 import { requireAdminAccess, requireAdminUser } from './track.admin.js'
-import { insertTrackEvents } from './track.repo.js'
+import { completeAskEvent, insertTrackEvents } from './track.repo.js'
 import { buildStatsSummary } from './track.stats.js'
 import { parseTrackEnvelope, parseTrackItem } from './track.validate.js'
 import type {
@@ -35,6 +35,10 @@ export const trackRouter: Router = Router()
 
 trackRouter.post('/api/track', (req: Request, res: Response) => {
   void handleTrack(req, res)
+})
+
+trackRouter.post('/api/track/ask-answer', (req: Request, res: Response) => {
+  void handleAskAnswer(req, res)
 })
 
 async function handleTrack(req: Request, res: Response): Promise<void> {
@@ -72,6 +76,40 @@ async function handleTrack(req: Request, res: Response): Promise<void> {
     console.error(`[track] 事件落库失败（${accepted.length} 条）：${detail}`)
     respondTrackError(res, 500, 'INTERNAL_ERROR', '埋点写入失败（详见服务端日志）', [])
   }
+}
+
+/** 挂件回答落地后回写：补 answer，并让「提问结果」离开未判定。失败也 200，埋点不能打断对话。 */
+async function handleAskAnswer(req: Request, res: Response): Promise<void> {
+  const body = readAskAnswerBody(req.body)
+  if (body === null) {
+    res.status(400).json({ success: false, updated: false })
+    return
+  }
+  try {
+    const updated = await completeAskEvent(getPrisma(), body)
+    res.status(200).json({ success: true, updated })
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.error(`[track] 回答回写失败：${detail}`)
+    res.status(200).json({ success: true, updated: false })
+  }
+}
+
+function readAskAnswerBody(raw: unknown): {
+  sessionId: string
+  question: string
+  answer: string
+  weknoraSessionId: string
+} | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  const sessionId = typeof record['sessionId'] === 'string' ? record['sessionId'].trim() : ''
+  const question = typeof record['question'] === 'string' ? record['question'].trim() : ''
+  const answer = typeof record['answer'] === 'string' ? record['answer'] : ''
+  const weknoraSessionId =
+    typeof record['weknoraSessionId'] === 'string' ? record['weknoraSessionId'].trim() : ''
+  if (sessionId === '' || question === '' || answer.trim() === '') return null
+  return { sessionId, question, answer, weknoraSessionId }
 }
 
 function respondTrackError(

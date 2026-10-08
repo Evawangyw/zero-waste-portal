@@ -48,6 +48,26 @@ export async function trackBatch(inputs: readonly TrackEventInput[]): Promise<vo
   await send(body.length === 1 ? body[0] : body)
 }
 
+/** 回答落地后回写已有的 ai_ask。updated=false 表示问题行还没写上，调用方可以再试。 */
+export async function trackAskAnswer(input: {
+  readonly sessionId: string
+  readonly question: string
+  readonly answer: string
+  readonly weknoraSessionId: string
+}): Promise<boolean> {
+  try {
+    const result = await request<{ readonly success: boolean; readonly updated: boolean }>(
+      '/track/ask-answer',
+      { method: 'POST', body: input },
+    )
+    return result.updated
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.warn(`[track] 回答回写失败（已忽略）：${detail}`)
+    return false
+  }
+}
+
 async function send(body: unknown): Promise<void> {
   try {
     await request<TrackAcceptedResponse>('/track', { method: 'POST', body })

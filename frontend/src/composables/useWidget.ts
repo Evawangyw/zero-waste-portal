@@ -15,7 +15,7 @@
 //   4. **串行发问队列**（QA-01 P0-2）：上一条还在生成时的新提问排队，绝不并发丢给挂件。
 import { ref } from 'vue'
 import { fetchEmbedConfig, fetchEmbedToken } from '../api/embed'
-import { trackAiAsk } from './useTracking'
+import { trackAiAsk, trackAskAnswer } from './useTracking'
 import { ApiError } from '../api/http'
 import type { EmbedWidgetPublicConfig } from '../api/types'
 
@@ -183,18 +183,38 @@ function bindWidgetListeners(): void {
   api.on('message_sent', (payload) => {
     onMessageSent(payload)
   })
-  api.on('message_received', () => {
-    onMessageReceived()
+  api.on('message_received', (payload) => {
+    onMessageReceived(payload)
   })
 }
+
+interface PendingAsk {
+  readonly question: string
+  readonly weknoraSessionId: string
+}
+
+/** 已发出、还没收到回答的提问。按发出顺序配对，避免后一条覆盖前一条。 */
+const pendingAsks: PendingAsk[] = []
 
 function onMessageSent(payload: unknown): void {
   const query = readEventQuery(payload)
   // 只有挂件确认"真的发出去了"才计数（原来在点击时无条件计数，上游吞掉的也照记）
   void trackAiAsk(query, resolveSource(query))
+  if (query.trim() !== '') {
+    pendingAsks.push({ question: query, weknoraSessionId: readEventSessionId(payload) })
+  }
 }
 
-function onMessageReceived(): void {
+function onMessageReceived(payload: unknown): void {
+  const pending = pendingAsks.shift()
+  const answer = readEventContent(payload)
+  if (pending !== undefined && answer.trim() !== '') {
+    trackAskAnswer({
+      question: pending.question,
+      answer,
+      weknoraSessionId: pending.weknoraSessionId || readEventSessionId(payload),
+    })
+  }
   settleInFlight()
   drainAskQueue()
 }
@@ -250,8 +270,20 @@ function resolveSource(question: string): string {
 
 /** loader 事件载荷里的问题文本（结构不对就退回空串，仍照常计数） */
 function readEventQuery(payload: unknown): string {
+  return readEventString(payload, 'query')
+}
+
+function readEventContent(payload: unknown): string {
+  return readEventString(payload, 'content')
+}
+
+function readEventSessionId(payload: unknown): string {
+  return readEventString(payload, 'sessionId')
+}
+
+function readEventString(payload: unknown, key: string): string {
   if (typeof payload !== 'object' || payload === null) return ''
-  const raw = (payload as { readonly query?: unknown }).query
+  const raw = (payload as Record<string, unknown>)[key]
   return typeof raw === 'string' ? raw : ''
 }
 

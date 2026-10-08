@@ -294,6 +294,8 @@ export interface StatsSummaryResponse {
   readonly events: Readonly<Record<TrackEventName, number>>
   readonly topSearchTerms: readonly { readonly term: string; readonly count: number }[]
   readonly zeroResultSearchTerms: readonly { readonly term: string; readonly count: number }[]
+  /** 提问原文 Top10。历史行没有 term 时后端从 payload.question 回退。 */
+  readonly topAskTerms: readonly { readonly term: string; readonly count: number }[]
   readonly topDownloads: readonly {
     readonly docId: string
     readonly fileName: string

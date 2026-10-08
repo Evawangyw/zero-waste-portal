@@ -10,10 +10,9 @@
 // afterEach / 事件处理器冒泡成白屏（真踩过：window.crypto.randomUUID 脱离 this 调用
 // 在 Chrome 里抛 TypeError: Illegal invocation，直接把路由启动打断）。
 //
-// 已知边界（已写入交付文档）：官方挂件 v0.8.2 没有回答回调，浏览器里**直接在挂件面板打字**的提问
-// 拿不到 answer/sources，后端会把它记成"未判定"；站内发起的提问目前也只带问题文本。
-// 要拿到回答证据做无答案判定，需要 P2 自建问答 UI（走我们自己的 /api/ask SSE）。
-import { trackEvent } from '../api/track'
+// 挂件 message_received 会带回答正文。trackAskAnswer 把它补进刚写入的 ai_ask，
+// 后端据此重算「有答案 / 没有答案」。回答还没落到库里时会短间隔重试。
+import { trackAskAnswer as postAskAnswer, trackEvent } from '../api/track'
 import { currentUser } from './useAuth'
 import { TRACK_SESSION_STORAGE_KEY } from '../constants'
 import type { TrackEventName } from '../api/types'
@@ -106,11 +105,44 @@ export function trackSearch(input: SearchTrackInput): void {
 }
 
 /**
- * 站内发起的提问（首页示例问题/自定义问题、书架零结果「试试问 AI」的统一收口）。
- * answer/sources 目前拿不到（挂件无回调），故只报问题；后端把这条记为「未判定」。
+ * 挂件确认发出的提问。此时还没有回答，后端先记成「未判定」；
+ * 回答落地后由 trackAskAnswer 补正文并重算。
  */
 export function trackAiAsk(question: string, source: string): void {
   emit('ai_ask', { question, source, judged: false })
+}
+
+/** 回答回写。问题和站点会话要对上刚写入的 ai_ask，否则后端找不到行。 */
+export function trackAskAnswer(input: {
+  readonly question: string
+  readonly answer: string
+  readonly weknoraSessionId: string
+}): void {
+  const question = input.question.trim()
+  const answer = input.answer.trim()
+  if (question === '' || answer === '') return
+  const sessionId = trackSessionId()
+  void retryAskAnswer({
+    sessionId,
+    question,
+    answer,
+    weknoraSessionId: input.weknoraSessionId,
+  })
+}
+
+async function retryAskAnswer(input: {
+  readonly sessionId: string
+  readonly question: string
+  readonly answer: string
+  readonly weknoraSessionId: string
+}): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const updated = await postAskAnswer(input)
+    if (updated) return
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 400)
+    })
+  }
 }
 
 /** 在线预览开流成功后 */

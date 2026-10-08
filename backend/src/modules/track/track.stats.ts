@@ -32,6 +32,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     eventRows,
     topSearchTerms,
     zeroResultSearchTerms,
+    topAskTerms,
     topDownloads,
     downloadLogRows,
     downloadEvents,
@@ -67,6 +68,21 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
       ORDER BY COUNT(*) DESC, "term" ASC
       LIMIT ${STATS_TOP_LIMIT}
     `),
+    prisma.$queryRaw<RawTermRow[]>(Prisma.sql`
+      SELECT "q" AS "term", COUNT(*) AS "count"
+      FROM (
+        SELECT CASE
+          WHEN "term" <> '' THEN "term"
+          ELSE lower(trim(COALESCE(json_extract("payload", '$.question'), '')))
+        END AS "q"
+        FROM "event_logs"
+        WHERE "event" = 'ai_ask'
+      )
+      WHERE "q" <> ''
+      GROUP BY "q"
+      ORDER BY COUNT(*) DESC, "q" ASC
+      LIMIT ${STATS_TOP_LIMIT}
+    `),
     prisma.$queryRaw<RawDownloadRow[]>(Prisma.sql`
       SELECT "docId", MAX("fileName") AS "fileName", COUNT(*) AS "count"
       FROM "download_logs"
@@ -93,6 +109,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     events: toEventCounts(eventRows),
     topSearchTerms: toTermCounts(topSearchTerms),
     zeroResultSearchTerms: toTermCounts(zeroResultSearchTerms),
+    topAskTerms: toTermCounts(topAskTerms),
     topDownloads: toDownloadItems(topDownloads),
     downloads: { logRows: downloadLogRows, events: downloadEvents },
     asks: toAsksSummary(asksTotal, asksNoAnswer, asksJudged),
