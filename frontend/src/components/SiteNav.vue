@@ -49,6 +49,7 @@ void authToken
 
       <nav class="nav-links">
         <router-link to="/" :class="{ active: isActive('/') }">首页</router-link>
+        <router-link to="/intro" :class="{ active: isActive('/intro') }">知识库介绍</router-link>
         <router-link v-if="isLoggedIn" to="/foundation" :class="{ active: isActive('/foundation') }">
           基金会
         </router-link>
