@@ -1,17 +1,20 @@
 // 模块边界：ask
 // 契约：
-//   POST /api/ask {"query":"..."} -> 200 + text/event-stream（SSE 直通 WeKnora 的流）
+//   POST /api/ask {"query":"..."} -> 200 + text/event-stream
+//     检索走 WeKnora /api/v1/knowledge-search（向量 + 重排，不生成）
+//     正文是抽出来的原文句子，句尾 [[n]]，末尾 @@sources@@ 给前端做来源卡片
 //   GET  /api/chat/history?conversationId= -> 当前窗口的消息，以及这个用户自己的窗口列表
 //   POST /api/chat/history {question, answer, thinking, conversationId?} -> 写入当前窗口
 //   POST /api/chat/conversations -> 新开一个空窗口（当前窗口已经是空的则不重复创建）
 //   DELETE /api/chat/history {conversationId} -> 清空这一窗的消息，其他窗口不动
-// 实现：提问只经 weknora 对接层；WeKnora 会话 id 服务端持有，不外泄。对话窗口只按登录用户隔离。
+// 实现：提问只经 weknora 对接层。对话窗口只按登录用户隔离。右下角挂件不走这条路由。
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { getAuthContext, requireAuth } from '../auth/index.js'
 import type { AuthLocals, AuthRequest } from '../auth/index.js'
-import { WeKnoraClient, WeKnoraError, isTerminalEvent } from '../../weknora/index.js'
-import type { AskEvent } from '../../weknora/index.js'
+import { WeKnoraClient, WeKnoraError } from '../../weknora/index.js'
+import { composeExtractiveAnswer } from './ask.extract.js'
+import type { ExtractHit } from './ask.extract.js'
 import {
   clearChatConversation,
   openChatWindow,
@@ -61,165 +64,58 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
 
   const client = WeKnoraClient.fromEnv()
   const debug = req.query['debug'] === '1'
-  // 客户端断开 -> 中止上游 WeKnora（signal 真正透传到 fetch，WeKnora 侧随之停止）
-  const clientGone = new AbortController()
-  let events: AsyncGenerator<AskEvent, void, void>
+  let hits
   try {
-    const session = await client.createSession(`web:${body.query.slice(0, 30)}`)
-    events = await client.askKnowledgeBase({
-      sessionId: session.id,
-      query: body.query,
-      knowledgeBaseIds: body.knowledgeBaseIds ?? [],
-      signal: clientGone.signal,
-    })
+    hits = await client.searchKnowledge(body.query, body.knowledgeBaseIds)
   } catch (err) {
     const error = WeKnoraError.from(err, '/api/ask')
     res.status(statusFor(error.kind)).json({ type: 'error', content: error.message })
     return
   }
 
-  req.on('aborted', () => {
-    clientGone.abort()
-  })
-  res.on('close', () => {
-    clientGone.abort()
-  })
+  const composed = composeExtractiveAnswer(
+    body.query,
+    hits.map(
+      (hit): ExtractHit => ({
+        knowledgeId: hit.knowledgeId,
+        title: hit.knowledgeTitle !== '' ? hit.knowledgeTitle : hit.knowledgeFilename,
+        content: hit.content,
+        score: hit.score,
+        customMetadataText: hit.customMetadataText,
+      }),
+    ),
+  )
 
   res.status(200)
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('Connection', 'keep-alive')
-  res.setHeader('X-Accel-Buffering', 'no') // 防 nginx 缓冲（deploy/nginx.conf 后续对齐）
+  res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
 
-  let terminated = false
-  const announcedTools = new Set<string>()
-  try {
-    for await (const evt of events) {
-      if (clientGone.signal.aborted) break
-      if (debug) {
-        writeSse(res, {
-          type: 'raw',
-          content: JSON.stringify(evt.raw),
-          responseType: evt.responseType,
-        })
-        if (isTerminalEvent(evt)) break
-        continue
-      }
-      // 终止信号：complete / stop / error（不是 done！见 weknora/sse.ts 的协议实测注释）
-      if (isTerminalEvent(evt)) {
-        writeSse(res, {
-          type: evt.responseType === 'error' ? 'error' : 'done',
-          content: evt.content,
-          responseType: evt.responseType,
-        })
-        terminated = true
-        break
-      }
-      // 正文分片
-      if (evt.responseType === 'answer') {
-        if (evt.content !== '') writeSse(res, { type: 'answer', content: evt.content })
-        continue
-      }
-      // 思考过程与工具调用：首页要展示。默认仍不透，includeThinking=true 才给。
-      if (body.includeThinking === true) {
-        const trace = readAgentTrace(evt, announcedTools)
-        if (trace !== '') writeSse(res, { type: 'thinking', content: trace })
-      }
-      if (
-        evt.responseType === 'thinking' ||
-        evt.responseType === 'reflection' ||
-        evt.responseType === 'tool_call' ||
-        evt.responseType === 'tool_result'
-      ) {
-        continue
-      }
-      // 其余类型（agent_query 入队确认 / references 引用 / session_title 等）不透给前端
+  if (debug) {
+    for (const hit of hits) {
+      writeSse(res, {
+        type: 'raw',
+        content: JSON.stringify({
+          knowledge_id: hit.knowledgeId,
+          knowledge_title: hit.knowledgeTitle,
+          score: hit.score,
+          content: hit.content.slice(0, 500),
+        }),
+        responseType: 'references',
+      })
     }
-    // 上游没发终止帧就断了（异常收尾）：补一个 done，前端才知道流结束
-    if (!terminated && !res.writableEnded && !clientGone.signal.aborted) {
-      writeSse(res, { type: 'done', content: '' })
-    }
-  } catch (err) {
-    const error = WeKnoraError.from(err, '/api/ask')
-    // 流已开始，只能以 SSE error 事件收尾，不能再改 HTTP 状态码
-    writeSse(res, { type: 'error', content: error.message })
-  } finally {
-    res.end()
   }
-}
-
-/** 把思考片段和工具调用收成前端能直接拼上的文字。同一次工具调用只报一次。 */
-function readAgentTrace(
-  evt: {
-    readonly responseType: string
-    readonly content: string
-    readonly raw: Readonly<Record<string, unknown>>
-  },
-  announcedTools: Set<string>,
-): string {
-  if (evt.responseType === 'thinking' || evt.responseType === 'reflection') return evt.content
-  if (evt.responseType !== 'tool_call' && evt.responseType !== 'tool_result') return ''
-  const data = asRecord(evt.raw['data'])
-  const name = readString(data, 'tool_name')
-  if (name === '' || name === 'final_answer') return ''
-  const id = readString(data, 'tool_call_id') || name
-  const key = `${evt.responseType}:${id}`
-  if (announcedTools.has(key)) return ''
-  if (evt.responseType === 'tool_result') {
-    announcedTools.add(key)
-    return `\n${toolLabel(name)}完成\n`
+  if (body.includeThinking === true) {
+    writeSse(res, {
+      type: 'thinking',
+      content: `检索知识库，命中 ${hits.length} 个片段，按原文抽取回答。`,
+    })
   }
-  const query = readToolQuery(data?.['arguments'])
-  if (query === '' && !hasArguments(data?.['arguments'])) return ''
-  announcedTools.add(key)
-  return query === '' ? `\n${toolLabel(name)}\n` : `\n${toolLabel(name)}：${query}\n`
-}
-
-function toolLabel(name: string): string {
-  if (name === 'search_knowledge') return '检索知识库'
-  if (name === 'read_document') return '阅读文档'
-  if (name === 'list_documents') return '查看文档列表'
-  return `调用${name}`
-}
-
-function readToolQuery(raw: unknown): string {
-  const record = typeof raw === 'string' ? parseObject(raw) : asRecord(raw)
-  if (record === null) return typeof raw === 'string' ? clipTrace(raw) : ''
-  for (const key of ['query', 'question', 'keyword']) {
-    const value = record[key]
-    if (typeof value === 'string' && value.trim() !== '') return clipTrace(value.trim())
-  }
-  return ''
-}
-
-function hasArguments(raw: unknown): boolean {
-  const record = typeof raw === 'string' ? parseObject(raw) : asRecord(raw)
-  return record !== null && Object.keys(record).length > 0
-}
-
-function parseObject(raw: string): Record<string, unknown> | null {
-  try {
-    return asRecord(JSON.parse(raw) as unknown)
-  } catch {
-    return null
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>
-  }
-  return null
-}
-
-function readString(record: Record<string, unknown> | null, key: string): string {
-  const value = record?.[key]
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function clipTrace(value: string): string {
-  return value.length <= 180 ? value : `${value.slice(0, 180)}…`
+  writeSse(res, { type: 'answer', content: composed.answer })
+  writeSse(res, { type: 'done', content: '' })
+  res.end()
 }
 
 /** 每条事件按 SSE 规范写成 `data: {json}\n\n`（curl -N 能实时看到） */

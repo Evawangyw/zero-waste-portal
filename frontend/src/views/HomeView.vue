@@ -1,15 +1,18 @@
 <script setup lang="ts">
 // 登录后的首页就是一轮一轮的对话。回答直接写在本页，并按账号保存历史。
 import { nextTick, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { SAMPLE_QUESTIONS } from '../constants'
 import {
   clearChatConversation,
   fetchChatHistory,
+  readExtractiveAnswer,
   saveChatTurn,
   startChatConversation,
   streamAsk,
 } from '../api/ask'
+import type { AskSource } from '../api/ask'
 import { fetchShelfTotal } from '../api/docs'
 import { ApiError } from '../api/http'
 import type { ChatConversationSummary, ChatHistoryResponse, ChatMessage } from '../api/types'
@@ -22,6 +25,7 @@ interface TranscriptLine {
   thinking: string
 }
 
+const router = useRouter()
 const customQuestion = ref('')
 const libraryEmpty = ref(false)
 const sending = ref(false)
@@ -260,6 +264,23 @@ function toLine(message: ChatMessage): TranscriptLine {
   }
 }
 
+function answerBody(content: string): string {
+  return readExtractiveAnswer(content).body
+}
+
+function answerSources(content: string): readonly AskSource[] {
+  return readExtractiveAnswer(content).sources
+}
+
+function sourceMeta(source: AskSource): string {
+  return [source.docType, source.organization, source.year].filter((part) => part !== '').join(' · ')
+}
+
+function openSource(docId: string): void {
+  if (docId === '') return
+  void router.push(`/doc/${docId}`)
+}
+
 function localId(): string {
   return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -325,7 +346,15 @@ async function scrollToEnd(): Promise<void> {
             <p class="thinking-label">思考过程</p>
             <p class="thinking-body">{{ line.thinking === '' ? '正在思考…' : line.thinking }}</p>
           </div>
-          <p v-if="line.content !== ''" class="bubble">{{ line.content }}</p>
+          <p v-if="answerBody(line.content) !== ''" class="bubble">{{ answerBody(line.content) }}</p>
+          <ul v-if="line.role === 'assistant' && answerSources(line.content).length > 0" class="sources">
+            <li v-for="source in answerSources(line.content)" :key="source.index">
+              <button type="button" class="source-link" @click="openSource(source.docId)">
+                [[{{ source.index }}]] {{ source.title }}
+              </button>
+              <span v-if="sourceMeta(source) !== ''" class="source-meta">{{ sourceMeta(source) }}</span>
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -438,6 +467,40 @@ async function scrollToEnd(): Promise<void> {
 
 .turn-assistant .bubble {
   background: #f7f7f5;
+}
+
+.sources {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sources li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--zw-line);
+}
+
+.source-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #017c40;
+  font: inherit;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.source-meta {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .thinking {
