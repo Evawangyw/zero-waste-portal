@@ -24,6 +24,7 @@
     "ingest:sample-pdf": "tsx src/modules/ingest/ingest.sample-pdf.ts",
     "test:track": "tsx src/modules/track/track.selftest.ts",
     "test:ask-history": "tsx src/modules/ask/ask.history.selftest.ts",
+    "test:ask-extract": "tsx src/modules/ask/ask.extract.selftest.ts",
     "admin:promote": "tsx src/modules/track/track.admin.cli.ts"
   },
   "dependencies": {

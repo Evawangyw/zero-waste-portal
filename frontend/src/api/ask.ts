@@ -7,6 +7,68 @@ export interface AskDelta {
   readonly content: string
 }
 
+/** 与后端 EXTRACT_SOURCE_MARK 一致。回答正文在标记之前，来源 JSON 在标记之后。 */
+const EXTRACT_SOURCE_MARK = '@@sources@@'
+
+export interface AskSource {
+  readonly index: number
+  readonly docId: string
+  readonly title: string
+  readonly organization: string
+  readonly year: string
+  readonly docType: string
+}
+
+export function readExtractiveAnswer(content: string): {
+  readonly body: string
+  readonly sources: readonly AskSource[]
+} {
+  const at = content.indexOf(EXTRACT_SOURCE_MARK)
+  if (at < 0) return { body: content, sources: [] }
+  const body = content
+    .slice(0, at)
+    .replace(/\n*参考来源[\s\S]*$/, '')
+    .trimEnd()
+  return { body, sources: parseSources(content.slice(at + EXTRACT_SOURCE_MARK.length).trim()) }
+}
+
+function parseSources(raw: string): readonly AskSource[] {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const sources: AskSource[] = []
+    for (const item of parsed) {
+      const source = readSource(item)
+      if (source !== null) sources.push(source)
+    }
+    return sources
+  } catch {
+    return []
+  }
+}
+
+function readSource(value: unknown): AskSource | null {
+  if (typeof value !== 'object' || value === null) return null
+  const record = value as {
+    readonly index?: unknown
+    readonly docId?: unknown
+    readonly title?: unknown
+    readonly organization?: unknown
+    readonly year?: unknown
+    readonly docType?: unknown
+  }
+  if (typeof record.index !== 'number' || typeof record.docId !== 'string') return null
+  if (typeof record.title !== 'string' || record.title === '') return null
+  return {
+    index: record.index,
+    docId: record.docId,
+    title: record.title,
+    organization: typeof record.organization === 'string' ? record.organization : '',
+    year: typeof record.year === 'string' ? record.year : '',
+    docType: typeof record.docType === 'string' ? record.docType : '',
+  }
+}
+
 export function fetchChatHistory(
   token: string,
   conversationId?: string,

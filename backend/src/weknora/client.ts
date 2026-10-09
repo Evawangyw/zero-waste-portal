@@ -27,9 +27,13 @@ import type {
   UploadFileResult,
   WeKnoraBinary,
   WeKnoraConfig,
+  KnowledgeSearchHit,
   WeKnoraKnowledge,
   WeKnoraSession,
 } from './types.js'
+
+/** 检索含向量与重排，15s 默认超时偏紧，单独放宽 */
+const SEARCH_TIMEOUT_MS = 45_000
 
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 200
@@ -300,7 +304,44 @@ export class WeKnoraClient {
     return { raw: asRecord(payload) }
   }
 
-  // ---------------------------------------------------------------- 会话问答
+  // ---------------------------------------------------------------- 检索 / 会话问答
+
+  /**
+   * 只检索、不生成。POST /api/v1/knowledge-search。
+   * 知识库缺省时用 .env 的 WEKNORA_KB_ID。
+   */
+  async searchKnowledge(
+    query: string,
+    knowledgeBaseIds?: readonly string[],
+  ): Promise<readonly KnowledgeSearchHit[]> {
+    const ids =
+      knowledgeBaseIds !== undefined && knowledgeBaseIds.length > 0
+        ? [...knowledgeBaseIds]
+        : [this.config.knowledgeBaseId]
+    const path = '/api/v1/knowledge-search'
+    const payload = await requestJson(this.transport, {
+      method: 'POST',
+      path,
+      body: { query, knowledge_base_ids: ids },
+      timeoutMs: SEARCH_TIMEOUT_MS,
+    })
+    const envelope = asRecord(payload)
+    const rows = envelope['data']
+    if (!Array.isArray(rows)) {
+      throw new WeKnoraError({
+        kind: 'parse_error',
+        message: 'WeKnora 检索接口未返回 data 数组',
+        path,
+        retryable: false,
+      })
+    }
+    const hits: KnowledgeSearchHit[] = []
+    for (const row of rows) {
+      const hit = toSearchHit(row)
+      if (hit.knowledgeId !== '' && hit.content.trim() !== '') hits.push(hit)
+    }
+    return hits
+  }
 
   /** 方法 5：创建会话 */
   async createSession(title: string): Promise<WeKnoraSession> {
@@ -449,6 +490,20 @@ function toKnowledge(raw: unknown): WeKnoraKnowledge {
     createdAt: readString(obj, 'created_at'),
     updatedAt: readString(obj, 'updated_at'),
     raw: obj,
+  }
+}
+
+function toSearchHit(raw: unknown): KnowledgeSearchHit {
+  const obj = asRecord(raw)
+  const score = obj['score']
+  return {
+    id: readString(obj, 'id'),
+    content: readString(obj, 'content'),
+    knowledgeId: readString(obj, 'knowledge_id'),
+    knowledgeTitle: readString(obj, 'knowledge_title'),
+    knowledgeFilename: readString(obj, 'knowledge_filename'),
+    score: typeof score === 'number' && Number.isFinite(score) ? score : 0,
+    customMetadataText: readString(obj, 'knowledge_custom_metadata'),
   }
 }
 

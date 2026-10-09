@@ -135,6 +135,21 @@ export interface AskKnowledgeParams {
   readonly signal?: AbortSignal | undefined
 }
 
+/**
+ * POST /api/v1/knowledge-search 的一条命中。
+ * 只建模抽取式回答用得到的字段；这是检索，不经过对话模型。
+ */
+export interface KnowledgeSearchHit {
+  readonly id: string
+  readonly content: string
+  readonly knowledgeId: string
+  readonly knowledgeTitle: string
+  readonly knowledgeFilename: string
+  readonly score: number
+  /** 上游 knowledge_custom_metadata，实测为「键: 值」多行文本 */
+  readonly customMetadataText: string
+}
+
 export interface BatchDownloadResult {
   readonly raw: Readonly<Record<string, unknown>>
 }

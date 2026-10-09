@@ -25,6 +25,7 @@ export type {
   AskEvent,
   AskKnowledgeParams,
   BatchDownloadResult,
+  KnowledgeSearchHit,
   ListKnowledgeParams,
   ListKnowledgeResult,
   WeKnoraBinary,
