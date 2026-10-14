@@ -7,6 +7,9 @@
 //   GET  /api/admin/stats/summary-> 200 StatsSummaryResponse
 //                                -> 401 / 403 守卫（见 track.admin.ts）
 //                                   -> 500 统计查询失败
+//   GET  /api/admin/chunks/documents -> 200 已审核资料和切片数
+//   GET  /api/admin/chunks           -> 200 某一份资料的切片页
+//                                    -> 400 缺 documentId | 404 没有这份资料 | 503 语料读不到
 //
 // 实现要点：
 //  - 埋点是「尽力而为」的旁路：任何一条非法事件都不影响同批的合法事件（逐条校验、允许部分成功），
@@ -18,6 +21,7 @@ import type { Request, Response } from 'express'
 import { getPrisma } from '../../db/prisma.js'
 import { requireAdminAccess, requireAdminUser } from './track.admin.js'
 import { completeAskEvent, insertTrackEvents } from './track.repo.js'
+import { handleChunkDocuments, handleChunkPage } from './track.chunks.js'
 import { buildStatsSummary } from './track.stats.js'
 import { parseTrackEnvelope, parseTrackItem } from './track.validate.js'
 import type {
@@ -145,6 +149,24 @@ trackRouter.get(
   requireAdminUser,
   (_req: Request, res: Response) => {
     void handleSummary(res)
+  },
+)
+
+trackRouter.get(
+  '/api/admin/chunks/documents',
+  requireAdminAccess,
+  requireAdminUser,
+  (req: Request, res: Response) => {
+    void handleChunkDocuments(req, res)
+  },
+)
+
+trackRouter.get(
+  '/api/admin/chunks',
+  requireAdminAccess,
+  requireAdminUser,
+  (req: Request, res: Response) => {
+    void handleChunkPage(req, res)
   },
 )
 

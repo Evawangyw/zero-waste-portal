@@ -4,8 +4,9 @@
 // 权限判定留在视图内：校验中 → 未登录 → 非管理员，三态各自给对应提示。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import type { EChartsCoreOption } from 'echarts/core'
-import { fetchStatsSummary } from '../api/admin'
+import { fetchStatsSummary, uploadAdminDocument } from '../api/admin'
 import { ApiError } from '../api/http'
 import type { StatsSummaryResponse } from '../api/types'
 import StatsChart from '../components/StatsChart.vue'
@@ -31,6 +32,16 @@ const showPanel = computed(() => authChecked.value && isAdmin.value && !authUnve
 const summary = ref<StatsSummaryResponse | null>(null)
 const loading = ref(false)
 const loadError = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
+const uploadOpen = ref(false)
+const uploadFile = ref<File | null>(null)
+const uploadBusy = ref(false)
+const uploadError = ref('')
+const uploadTitle = ref('')
+const uploadYear = ref('')
+const uploadOrg = ref('')
+const uploadType = ref('')
+const uploadTopic = ref('')
 
 /** 事件分布表的行（key/label 来自 constants，值来自 summary.events，缺项补 0） */
 const eventRows = computed(() =>
@@ -128,6 +139,58 @@ function onManualRefresh(): void {
   void loadSummary()
 }
 
+function openUploadPicker(): void {
+  uploadError.value = ''
+  fileInput.value?.click()
+}
+
+function onUploadPicked(event: Event): void {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement)) return
+  const file = input.files?.[0] ?? null
+  input.value = ''
+  if (file === null) return
+  uploadFile.value = file
+  uploadTitle.value = file.name.replace(/\.[a-z0-9]{1,8}$/iu, '')
+  uploadYear.value = ''
+  uploadOrg.value = ''
+  uploadType.value = ''
+  uploadTopic.value = ''
+  uploadError.value = ''
+  uploadOpen.value = true
+}
+
+function closeUpload(): void {
+  if (uploadBusy.value) return
+  uploadOpen.value = false
+  uploadFile.value = null
+}
+
+async function submitUpload(): Promise<void> {
+  const token = authToken()
+  const file = uploadFile.value
+  if (token === null || file === null || uploadBusy.value) return
+  uploadBusy.value = true
+  uploadError.value = ''
+  try {
+    const result = await uploadAdminDocument(token, file, {
+      title: uploadTitle.value.trim(),
+      year: uploadYear.value.trim(),
+      org: uploadOrg.value.trim(),
+      docType: uploadType.value.trim(),
+      topic: uploadTopic.value.trim(),
+    })
+    uploadOpen.value = false
+    uploadFile.value = null
+    ElMessage.success(`《${result.doc.title}》已上架。${result.somark.message}`)
+    await loadSummary()
+  } catch (err) {
+    uploadError.value = err instanceof ApiError ? err.message : '上传失败'
+  } finally {
+    uploadBusy.value = false
+  }
+}
+
 function goAuth(): void {
   void router.push({ path: '/auth', query: { redirect: '/admin/stats' } })
 }
@@ -162,6 +225,17 @@ function downloadTitle(fileName: string): string {
 function formatTime(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
+}
+
+function formatOptionalTime(value: string | null): string {
+  if (value === null || value === '') return '—'
+  return formatTime(value)
+}
+
+function visitorStamp(row: unknown, key: 'firstSeenAt' | 'lastSeenAt'): string {
+  if (typeof row !== 'object' || row === null || !(key in row)) return ''
+  const value = Reflect.get(row, key)
+  return typeof value === 'string' ? value : ''
 }
 
 function docLink(docId: string): string {
@@ -400,9 +474,46 @@ onUnmounted(() => {
               5 分钟自动刷新。
             </p>
           </div>
-          <el-button :loading="loading" @click="onManualRefresh">刷新</el-button>
+          <div class="head-actions">
+            <el-button type="primary" @click="openUploadPicker">上传资料</el-button>
+            <el-button :loading="loading" @click="onManualRefresh">刷新</el-button>
+          </div>
         </div>
       </el-card>
+
+      <input
+        ref="fileInput"
+        class="upload-input"
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf"
+        @change="onUploadPicked"
+      />
+
+      <el-dialog v-model="uploadOpen" title="上传资料" width="480px" :close-on-click-modal="!uploadBusy" :show-close="!uploadBusy" @close="closeUpload">
+        <p class="upload-file">{{ uploadFile?.name }}</p>
+        <el-form label-position="top">
+          <el-form-item label="标题">
+            <el-input v-model="uploadTitle" maxlength="200" />
+          </el-form-item>
+          <el-form-item label="年份">
+            <el-input v-model="uploadYear" maxlength="4" placeholder="例如 2024，可空" />
+          </el-form-item>
+          <el-form-item label="发布机构">
+            <el-input v-model="uploadOrg" maxlength="80" />
+          </el-form-item>
+          <el-form-item label="知识类型">
+            <el-input v-model="uploadType" maxlength="40" placeholder="例如 研究报告" />
+          </el-form-item>
+          <el-form-item label="主题">
+            <el-input v-model="uploadTopic" maxlength="40" />
+          </el-form-item>
+        </el-form>
+        <el-alert v-if="uploadError !== ''" type="error" :closable="false" :title="uploadError" />
+        <template #footer>
+          <el-button :disabled="uploadBusy" @click="closeUpload">取消</el-button>
+          <el-button type="primary" :loading="uploadBusy" @click="submitUpload">开始上传</el-button>
+        </template>
+      </el-dialog>
 
       <el-alert
         v-if="loadError !== ''"
@@ -415,6 +526,67 @@ onUnmounted(() => {
       />
 
       <template v-if="summary !== null">
+        <el-row :gutter="16">
+          <el-col :xs="12" :sm="8" :lg="4">
+            <el-card shadow="never" class="metric-card">
+              <div class="metric-value">{{ summary.library.documents }}</div>
+              <div class="metric-label">知识库文档</div>
+              <div class="metric-note">已上架，可检索</div>
+            </el-card>
+          </el-col>
+          <el-col :xs="12" :sm="8" :lg="4">
+            <el-card shadow="never" class="metric-card">
+              <div class="metric-value">{{ summary.library.regularUsers }}</div>
+              <div class="metric-label">普通用户</div>
+              <div class="metric-note">管理员 {{ summary.library.adminUsers }}</div>
+            </el-card>
+          </el-col>
+          <el-col :xs="12" :sm="8" :lg="4">
+            <el-card shadow="never" class="metric-card">
+              <div class="metric-value">{{ summary.library.downloads }}</div>
+              <div class="metric-label">累计下载</div>
+              <div class="metric-note">资料下载次数</div>
+            </el-card>
+          </el-col>
+          <el-col :xs="12" :sm="8" :lg="4">
+            <el-card shadow="never" class="metric-card">
+              <div class="metric-value">{{ summary.library.questions }}</div>
+              <div class="metric-label">AI 提问</div>
+              <div class="metric-note">已写入对话的提问</div>
+            </el-card>
+          </el-col>
+          <el-col :xs="12" :sm="8" :lg="4">
+            <el-card shadow="never" class="metric-card">
+              <div class="metric-value">{{ summary.library.visitors }}</div>
+              <div class="metric-label">独立访客</div>
+              <div class="metric-note">今日活跃 {{ summary.library.activeToday }}</div>
+            </el-card>
+          </el-col>
+          <el-col :xs="12" :sm="8" :lg="4">
+            <el-card shadow="never" class="metric-card">
+              <div class="metric-value">{{ summary.library.pendingSubmissions }}</div>
+              <div class="metric-label">待审核资料</div>
+              <div class="metric-note">反馈提交 {{ summary.library.feedbackEvents }} 次</div>
+            </el-card>
+          </el-col>
+        </el-row>
+
+        <el-card shadow="never" class="block">
+          <template #header><span class="block-title">知识库索引</span></template>
+          <div v-if="summary.library.index.available" class="kv-grid">
+            <div><span>已审核文档</span><b>{{ summary.library.index.documentsApproved }} / {{ summary.library.index.documentsTotal }}</b></div>
+            <div><span>已索引文档</span><b>{{ summary.library.index.indexedDocuments }}</b></div>
+            <div><span>正文切片</span><b>{{ summary.library.index.chunks }}</b></div>
+            <div><span>平均切片/篇</span><b>{{ summary.library.index.avgChunksPerDoc }}</b></div>
+            <div><span>最近向量索引</span><b>{{ formatOptionalTime(summary.library.index.lastVectorAt) }}</b></div>
+            <div><span>书架同步时间</span><b>{{ formatOptionalTime(summary.library.index.shelfSyncedAt) }}</b></div>
+          </div>
+          <el-empty v-else description="语料库这次没有读到，切片数字先空着" />
+          <p v-if="summary.library.index.docsWithoutChunks.count > 0" class="index-warn">
+            有 {{ summary.library.index.docsWithoutChunks.count }} 份已审核文档没有切片：{{ summary.library.index.docsWithoutChunks.samples.join('、') }}
+          </p>
+        </el-card>
+
         <el-row :gutter="16">
           <el-col :xs="12" :sm="6">
             <el-card shadow="never" class="metric-card">
@@ -495,6 +667,29 @@ onUnmounted(() => {
           </el-col>
         </el-row>
 
+        <el-card shadow="never" class="block">
+          <template #header>
+            <span class="block-title">访问概览</span>
+          </template>
+          <div class="kv-grid">
+            <div><span>独立访客</span><b>{{ summary.library.visitors }}</b></div>
+            <div><span>今日活跃</span><b>{{ summary.library.activeToday }}</b></div>
+            <div><span>累计访问</span><b>{{ summary.library.visitHits }}</b></div>
+          </div>
+          <p class="metric-note visit-note">按登录账号或匿名会话统计。当前版本不记录 IP。</p>
+          <el-table v-if="summary.library.recentVisitors.length > 0" :data="summary.library.recentVisitors" size="small">
+            <el-table-column prop="label" label="访客" min-width="140" />
+            <el-table-column prop="hits" label="行为次数" width="100" />
+            <el-table-column label="首次" min-width="160">
+              <template #default="{ row }">{{ formatTime(visitorStamp(row, 'firstSeenAt')) }}</template>
+            </el-table-column>
+            <el-table-column label="最近" min-width="160">
+              <template #default="{ row }">{{ formatTime(visitorStamp(row, 'lastSeenAt')) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="还没有访问记录" />
+        </el-card>
+
       </template>
     </template>
   </div>
@@ -516,6 +711,23 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.head-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.upload-input {
+  display: none;
+}
+
+.upload-file {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
 }
 
 .head-title {
@@ -559,6 +771,39 @@ onUnmounted(() => {
   margin-top: 4px;
   font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+
+.metric-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 16px;
+}
+
+.kv-grid span {
+  display: block;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.kv-grid b {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.index-warn {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--el-color-warning);
+}
+
+.visit-note {
+  margin: 8px 0 12px;
 }
 
 </style>

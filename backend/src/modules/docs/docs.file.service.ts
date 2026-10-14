@@ -101,8 +101,9 @@ export async function resolveDocDetail(
   const indexed = await findIndexedDoc(prisma, id)
 
   // 语料编号（复现包 documents.id）的摘要在索引的「内容提要」里，不再回源 WeKnora。
-  const corpus = await findCorpusDoc(id)
-  const upstream = corpus === null ? await fetchKnowledgeSafely(client, id) : null
+  const localUpload = id.startsWith('upload-')
+  const corpus = localUpload ? null : await findCorpusDoc(id)
+  const upstream = corpus === null && !localUpload ? await fetchKnowledgeSafely(client, id) : null
 
   if (indexed === null && upstream === null) return null
 
@@ -144,8 +145,10 @@ export async function resolveDocForDownload(
   client: WeKnoraClient = WeKnoraClient.fromEnv(),
 ): Promise<ResolvedDocForDownload | null> {
   const indexed = await findIndexedDoc(prisma, id)
-  const corpus = await findCorpusDoc(id)
-  const upstream = indexed === null && corpus === null ? await fetchKnowledgeSafely(client, id) : null
+  const localUpload = id.startsWith('upload-')
+  const corpus = localUpload ? null : await findCorpusDoc(id)
+  const upstream =
+    indexed === null && corpus === null && !localUpload ? await fetchKnowledgeSafely(client, id) : null
   if (indexed === null && upstream === null) return null
 
   const merged: {

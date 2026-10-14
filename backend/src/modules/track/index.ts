@@ -49,6 +49,9 @@ export {
   TRACK_MAX_USER_ID_CHARS,
 } from './track.types.js'
 export type {
+  AdminIndexStatus,
+  AdminLibraryStats,
+  AdminVisitorRow,
   AsksSummary,
   DownloadTopItem,
   SearchTermCount,

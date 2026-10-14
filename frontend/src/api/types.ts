@@ -345,4 +345,91 @@ export interface StatsSummaryResponse {
     /** 无答案率 = noAnswer / judged */
     readonly noAnswerRate: number
   }
+  /** 复现包管理后台顶部的规模统计，口径在后端 library 字段 */
+  readonly library: AdminLibraryStats
+}
+
+export interface ChunkDocumentItem {
+  readonly documentId: number
+  readonly title: string
+  readonly organization: string
+  readonly year: string
+  readonly chunkCount: number
+}
+
+export interface ChunkDocumentsResponse {
+  readonly success: true
+  readonly documents: readonly ChunkDocumentItem[]
+}
+
+export interface ChunkPageItem {
+  readonly chunkId: number
+  readonly chunkIndex: number
+  readonly content: string
+}
+
+export interface ChunkPageResponse {
+  readonly success: true
+  readonly documentId: number
+  readonly title: string
+  readonly total: number
+  readonly page: number
+  readonly pageSize: number
+  readonly items: readonly ChunkPageItem[]
+}
+
+/** POST /api/admin/uploads 成功后的资料 */
+export interface SomarkJobView {
+  readonly documentId: string
+  readonly status: 'pending' | 'running' | 'done' | 'failed'
+  readonly message: string
+  readonly requestedAt: string
+  readonly fileName: string
+  readonly fileSize: number
+}
+
+export interface AdminUploadResult {
+  readonly success: true
+  readonly doc: {
+    readonly id: string
+    readonly title: string
+    readonly fileName: string
+    readonly fileType: string
+    readonly fileSize: number
+  }
+  readonly somark: SomarkJobView
+}
+
+/** 与后端 AdminLibraryStats 对齐 */
+export interface AdminLibraryStats {
+  readonly documents: number
+  readonly regularUsers: number
+  readonly adminUsers: number
+  readonly downloads: number
+  readonly questions: number
+  readonly visitors: number
+  readonly activeToday: number
+  readonly visitHits: number
+  readonly pendingSubmissions: number
+  readonly feedbackEvents: number
+  readonly index: {
+    readonly available: boolean
+    readonly documentsApproved: number
+    readonly documentsTotal: number
+    readonly indexedDocuments: number
+    readonly chunks: number
+    readonly avgChunksPerDoc: number
+    readonly lastVectorAt: string | null
+    readonly shelfSyncedAt: string | null
+    readonly docsWithoutChunks: {
+      readonly count: number
+      readonly samples: readonly string[]
+    }
+  }
+  readonly recentVisitors: readonly {
+    readonly label: string
+    readonly hits: number
+    readonly firstSeenAt: string
+    readonly lastSeenAt: string
+  }[]
 }

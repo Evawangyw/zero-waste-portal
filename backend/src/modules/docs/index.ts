@@ -36,6 +36,9 @@ export type {
 
 // T04 文件层（详情 / 预览 / 下载）
 export { fileRouter } from './docs.file.router.js'
+export { uploadRouter } from './docs.upload.router.js'
+export { pendingSomarkClient, requestSomarkConversion, readSomarkJob } from './docs.somark.js'
+export type { SomarkClient, SomarkConvertInput, SomarkJob, SomarkMarkdown, SomarkStatus } from './docs.somark.js'
 export {
   FILE_META_KEY_DOMAIN,
   FILE_META_KEY_DOC_TYPE,

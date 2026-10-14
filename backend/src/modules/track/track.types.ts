@@ -159,6 +159,100 @@ export interface StatsSummaryResponse {
     readonly events: number
   }
   readonly asks: AsksSummary
+  /**
+   * 复现包管理后台顶部那一组规模数字，按现有表能对上的口径接进来。
+   * 访客按登录账号或匿名会话计：当前库没有 IP 访问表。
+   */
+  readonly library: AdminLibraryStats
+}
+
+/** 复现包「知识库管理」顶部统计，映射到现有书架、用户、下载和对话 */
+export interface AdminLibraryStats {
+  /** knowledge_index 行数（已上架、可检索的资料） */
+  readonly documents: number
+  /** 非管理员用户 */
+  readonly regularUsers: number
+  /** isAdmin 用户。当前没有单独的总管理员字段 */
+  readonly adminUsers: number
+  /** download_logs 行数 */
+  readonly downloads: number
+  /** 已写入对话记录的用户提问（chat_messages.role = user） */
+  readonly questions: number
+  /** 独立访客：登录用户或匿名会话 */
+  readonly visitors: number
+  /** 今天有行为的独立访客 */
+  readonly activeToday: number
+  /** 页面浏览次数，当作累计访问 */
+  readonly visitHits: number
+  /** 公众提交里还待审核的资料 */
+  readonly pendingSubmissions: number
+  /** feedback_submit 事件条数。没有「已处理 / 未处理」状态 */
+  readonly feedbackEvents: number
+  readonly index: AdminIndexStatus
+  readonly recentVisitors: readonly AdminVisitorRow[]
+}
+
+/** 语料切片规模。available=false 表示语料库这次没读到 */
+export interface AdminIndexStatus {
+  readonly available: boolean
+  readonly documentsApproved: number
+  readonly documentsTotal: number
+  readonly indexedDocuments: number
+  readonly chunks: number
+  readonly avgChunksPerDoc: number
+  /** 向量缓存文件的修改时间；还没建索引时为 null */
+  readonly lastVectorAt: string | null
+  /** knowledge_index 最近一次同步时间 */
+  readonly shelfSyncedAt: string | null
+  readonly docsWithoutChunks: {
+    readonly count: number
+    readonly samples: readonly string[]
+  }
+}
+
+export interface ChunkDocumentItem {
+  readonly documentId: number
+  readonly title: string
+  readonly organization: string
+  readonly year: string
+  readonly chunkCount: number
+}
+
+export interface ChunkDocumentsResponse {
+  readonly success: true
+  readonly documents: readonly ChunkDocumentItem[]
+}
+
+export interface ChunkPageItem {
+  readonly chunkId: number
+  readonly chunkIndex: number
+  readonly content: string
+}
+
+export interface ChunkPageResponse {
+  readonly success: true
+  readonly documentId: number
+  readonly title: string
+  readonly total: number
+  readonly page: number
+  readonly pageSize: number
+  readonly items: readonly ChunkPageItem[]
+}
+
+export interface ChunkErrorResponse {
+  readonly success: false
+  readonly error: {
+    readonly kind: 'bad_request' | 'not_found' | 'unavailable'
+    readonly message: string
+  }
+}
+
+/** 最近活跃的访客。label 是姓名，或「匿名会话」加会话尾号 */
+export interface AdminVisitorRow {
+  readonly label: string
+  readonly hits: number
+  readonly firstSeenAt: string
+  readonly lastSeenAt: string
 }
 
 /** 统计层错误码 */

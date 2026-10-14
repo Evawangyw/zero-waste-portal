@@ -8,10 +8,15 @@
 //    简单计数走 Prisma count（同样一条 SQL，省事且类型安全）
 //  - 下载 Top10 读 **download_logs**（T04 权威口径），EventLog 的 download 事件只作对照
 //    （两者不等本身就是"有接口被绕过前端直连"的信息，见契约 §6）
+import { statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { Prisma } from '@prisma/client'
 import type { PrismaClient } from '@prisma/client'
+import { loadCorpusIndexStatus, vectorCacheDir } from '../ask/ask.corpus.js'
 import { TRACK_EVENTS } from './track.types.js'
 import type {
+  AdminLibraryStats,
+  AdminVisitorRow,
   AsksSummary,
   DownloadTopItem,
   SearchTermCount,
@@ -24,6 +29,8 @@ export const STATS_TOP_LIMIT = 10
 
 /** 全量统计摘要（看板一次性拉完；数据量级 P0 是千行级，无需分页/缓存） */
 export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSummaryResponse> {
+  const dayStart = localDayStartMs()
+  const dayEnd = dayStart + 86_400_000
   const [
     totalEvents,
     pv,
@@ -40,6 +47,14 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     asksTotal,
     asksNoAnswer,
     asksJudged,
+    adminUsers,
+    questions,
+    pendingSubmissions,
+    documents,
+    shelfSyncedRows,
+    activeTodayRows,
+    recentVisitorRows,
+    corpusIndex,
   ] = await Promise.all([
     prisma.eventLog.count(),
     prisma.eventLog.count({ where: { event: 'page_view' } }),
@@ -101,7 +116,53 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     prisma.eventLog.count({ where: { event: 'ai_ask' } }),
     prisma.eventLog.count({ where: { event: 'ai_ask', noAnswer: true } }),
     prisma.eventLog.count({ where: { event: 'ai_ask', noAnswer: { not: null } } }),
+    prisma.user.count({ where: { isAdmin: true } }),
+    prisma.chatMessage.count({ where: { role: 'user' } }),
+    prisma.submission.count({ where: { status: 'pending' } }),
+    prisma.knowledgeIndex.count(),
+    prisma.$queryRaw<RawTimeRow[]>(Prisma.sql`
+      SELECT MAX("syncedAt") AS "at" FROM "knowledge_index"
+    `),
+    prisma.$queryRaw<RawCountRow[]>(Prisma.sql`
+      SELECT COUNT(*) AS "total"
+      FROM (
+        SELECT DISTINCT COALESCE(NULLIF("userId", ''), NULLIF("sessionId", '')) AS "visitor"
+        FROM "event_logs"
+        WHERE "createdAt" >= ${dayStart} AND "createdAt" < ${dayEnd}
+          AND COALESCE(NULLIF("userId", ''), NULLIF("sessionId", '')) IS NOT NULL
+      )
+    `),
+    prisma.$queryRaw<RawVisitorRow[]>(Prisma.sql`
+      SELECT
+        COALESCE(NULLIF("userId", ''), NULLIF("sessionId", '')) AS "visitor",
+        COUNT(*) AS "hits",
+        MIN("createdAt") AS "firstSeen",
+        MAX("createdAt") AS "lastSeen"
+      FROM "event_logs"
+      WHERE COALESCE(NULLIF("userId", ''), NULLIF("sessionId", '')) IS NOT NULL
+      GROUP BY COALESCE(NULLIF("userId", ''), NULLIF("sessionId", ''))
+      ORDER BY MAX("createdAt") DESC
+      LIMIT ${STATS_TOP_LIMIT}
+    `),
+    loadCorpusIndexStatus(),
   ])
+
+  const events = toEventCounts(eventRows)
+  const library = await toLibraryStats(prisma, {
+    documents,
+    registeredUsers,
+    adminUsers,
+    downloads: downloadLogRows,
+    questions,
+    visitors: toNumber(uvRows[0]?.['total']),
+    activeToday: toNumber(activeTodayRows[0]?.['total']),
+    visitHits: pv,
+    pendingSubmissions,
+    feedbackEvents: events.feedback_submit,
+    shelfSyncedAt: toIso(shelfSyncedRows[0]?.['at']),
+    recentVisitors: recentVisitorRows,
+    corpusIndex,
+  })
 
   return {
     success: true,
@@ -112,13 +173,14 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
       uv: toNumber(uvRows[0]?.['total']),
       registeredUsers,
     },
-    events: toEventCounts(eventRows),
+    events,
     topSearchTerms: mergeSearchTerms(toTermCounts(topSearchTerms), shelfSearchPaths),
     zeroResultSearchTerms: toTermCounts(zeroResultSearchTerms),
     topAskTerms: toTermCounts(topAskTerms),
     topDownloads: toDownloadItems(topDownloads),
     downloads: { logRows: downloadLogRows, events: downloadEvents },
     asks: toAsksSummary(asksTotal, asksNoAnswer, asksJudged),
+    library,
   }
 }
 
@@ -135,8 +197,112 @@ export function toAsksSummary(total: number, noAnswer: number, judged: number): 
 
 // ------------------------------------------------------------------ 行 -> 视图
 
+interface LibraryInput {
+  readonly documents: number
+  readonly registeredUsers: number
+  readonly adminUsers: number
+  readonly downloads: number
+  readonly questions: number
+  readonly visitors: number
+  readonly activeToday: number
+  readonly visitHits: number
+  readonly pendingSubmissions: number
+  readonly feedbackEvents: number
+  readonly shelfSyncedAt: string | null
+  readonly recentVisitors: readonly RawVisitorRow[]
+  readonly corpusIndex: Awaited<ReturnType<typeof loadCorpusIndexStatus>>
+}
+
+async function toLibraryStats(prisma: PrismaClient, input: LibraryInput): Promise<AdminLibraryStats> {
+  const ids = input.recentVisitors
+    .map((row) => readString(row.visitor))
+    .filter((id) => id !== '')
+  const known =
+    ids.length === 0
+      ? []
+      : await prisma.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true },
+        })
+  const names = new Map(known.map((user) => [user.id, user.name]))
+  return {
+    documents: input.documents,
+    regularUsers: Math.max(input.registeredUsers - input.adminUsers, 0),
+    adminUsers: input.adminUsers,
+    downloads: input.downloads,
+    questions: input.questions,
+    visitors: input.visitors,
+    activeToday: input.activeToday,
+    visitHits: input.visitHits,
+    pendingSubmissions: input.pendingSubmissions,
+    feedbackEvents: input.feedbackEvents,
+    index: {
+      available: input.corpusIndex.available,
+      documentsApproved: input.corpusIndex.documentsApproved,
+      documentsTotal: input.corpusIndex.documentsTotal,
+      indexedDocuments: input.corpusIndex.indexedDocuments,
+      chunks: input.corpusIndex.chunks,
+      avgChunksPerDoc: input.corpusIndex.avgChunksPerDoc,
+      lastVectorAt: vectorCacheTime(),
+      shelfSyncedAt: input.shelfSyncedAt,
+      docsWithoutChunks: input.corpusIndex.docsWithoutChunks,
+    },
+    recentVisitors: input.recentVisitors.map((row) => toVisitorRow(row, names)),
+  }
+}
+
+function toVisitorRow(row: RawVisitorRow, names: ReadonlyMap<string, string>): AdminVisitorRow {
+  const id = readString(row.visitor)
+  const name = names.get(id)
+  const tail = id.length <= 4 ? id : id.slice(-4)
+  return {
+    label: name !== undefined && name !== '' ? name : `匿名会话 · ${tail}`,
+    hits: toNumber(row.hits),
+    firstSeenAt: toIso(row.firstSeen) ?? '',
+    lastSeenAt: toIso(row.lastSeen) ?? '',
+  }
+}
+
+function vectorCacheTime(): string | null {
+  try {
+    const modified = statSync(resolve(vectorCacheDir(), 'meta.json')).mtime
+    return Number.isNaN(modified.getTime()) ? null : modified.toISOString()
+  } catch {
+    return null
+  }
+}
+
+function localDayStartMs(now: Date = new Date()): number {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+}
+
+function toIso(value: unknown): string | null {
+  const asNumber = toNumber(value)
+  if (asNumber > 1_000_000_000_000) {
+    const date = new Date(asNumber)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString()
+  return null
+}
+
 interface RawCountRow {
   readonly total?: bigint | number | string | null
+}
+
+interface RawTimeRow {
+  readonly at?: bigint | number | string | Date | null
+}
+
+interface RawVisitorRow {
+  readonly visitor?: string | null
+  readonly hits?: bigint | number | string | null
+  readonly firstSeen?: bigint | number | string | Date | null
+  readonly lastSeen?: bigint | number | string | Date | null
 }
 
 interface RawTermRow {

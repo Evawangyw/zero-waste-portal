@@ -34,7 +34,10 @@ export async function syncCorpusShelf(
   }
 
   const removed = await prisma.knowledgeIndex.deleteMany({
-    where: { knowledgeId: { notIn: docs.map((doc) => doc.id) } },
+    where: {
+      knowledgeBaseId: CORPUS_KNOWLEDGE_BASE_ID,
+      knowledgeId: { notIn: docs.map((doc) => doc.id) },
+    },
   })
 
   const withFile = docs.filter((doc) => doc.localPath !== null).length

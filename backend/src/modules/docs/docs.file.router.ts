@@ -20,6 +20,7 @@ import type { AuthLocals, AuthRequest } from '../auth/index.js'
 import { getPrisma } from '../../db/prisma.js'
 import { WeKnoraClient } from '../../weknora/index.js'
 import { locateCorpusFile } from './docs.corpus.js'
+import { locateAdminUploadFile } from './docs.upload.js'
 import { buildContentDisposition, buildDownloadFileName } from './docs.file.name.js'
 import {
   decidePreview,
@@ -114,7 +115,7 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
     },
   }
 
-  const located = await locateCorpusFile(id)
+  const located = await resolveLocalFile(id)
   if (located?.kind === 'missing') {
     const envelope: PreviewEnvelope = {
       success: true,
@@ -184,7 +185,7 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
     resolved.fileType,
   )
 
-  const located = await locateCorpusFile(id)
+  const located = await resolveLocalFile(id)
   if (located?.kind === 'missing') {
     respondError(res, 404, 'not_found', '本机没有这份原文')
     return
@@ -212,6 +213,17 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
 }
 
 // ------------------------------------------------------------------ 本机原文
+
+/** 管理员上传优先，其次是语料原文。null 表示仍走原来的引擎。 */
+async function resolveLocalFile(
+  id: string,
+): Promise<
+  { readonly kind: 'file'; readonly path: string; readonly size: number } | { readonly kind: 'missing' } | null
+> {
+  const uploaded = await locateAdminUploadFile(id)
+  if (uploaded !== null) return uploaded
+  return locateCorpusFile(id)
+}
 
 /** 语料 PDF 直接从磁盘流出，不经过 WeKnora，也不把整份文件读进内存。 */
 async function pipeLocalFile(res: Response, filePath: string, options: PipeBinaryOptions): Promise<void> {
@@ -322,7 +334,7 @@ async function pipeBinary(
  * 资料 ID：WeKnora 的 UUID，或复现包 documents.id（纯数字）。
  * 不收路径分隔符，避免把 ../ 拼进文件路径。
  */
-const DOC_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{1,12})$/i
+const DOC_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{1,12}|upload-[0-9a-f]{16})$/i
 
 function readId(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
