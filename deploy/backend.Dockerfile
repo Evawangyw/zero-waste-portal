@@ -3,23 +3,25 @@
 
 FROM node:22-alpine AS base
 WORKDIR /app
-ENV NODE_ENV=production
 
-# ---- deps：只装依赖，利用层缓存 ----
+# ---- deps：编译需要 typescript、prisma、@types/node，这些在 devDependencies 里 ----
 FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY backend/package.json ./backend/package.json
 COPY frontend/package.json ./frontend/package.json
-RUN npm install --workspace backend --include-workspace-root
+RUN npm config set registry https://registry.npmmirror.com \
+ && npm install --workspace backend --include-workspace-root --include=dev
 
 # ---- build：编译 TS + 生成 Prisma Client ----
 FROM deps AS build
 COPY backend ./backend
 RUN npm run prisma:generate --workspace backend \
- && npm run build --workspace backend
+ && npm run build --workspace backend \
+ && mkdir -p backend/node_modules
 
 # ---- runtime：只带运行期文件 ----
 FROM base AS runtime
+ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/backend/node_modules ./backend/node_modules
 COPY --from=build /app/backend/dist ./backend/dist

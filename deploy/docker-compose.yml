@@ -20,8 +20,8 @@ services:
     ports:
       - '4000:4000'
     volumes:
-      # SQLite 数据文件与 prisma 客户端
-      - ../backend/data:/app/data
+      # SQLite 落在 backend/data/app.db（相对 prisma/schema.prisma 的 ../data）
+      - ../backend/data:/app/backend/data
     healthcheck:
       test:
         [
