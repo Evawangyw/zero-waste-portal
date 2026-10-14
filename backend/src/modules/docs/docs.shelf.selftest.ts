@@ -296,11 +296,19 @@ async function main(): Promise<void> {
   // ---- 5.4 「未标注」哨兵 ----
   const missingType = await queryShelf(prisma, { ...baseQuery(), types: [MISSING_LABEL] })
   const rawEmptyType = rawRows.filter((r) => r.docType === '').length
-  check(
-    `筛 ${MISSING_LABEL} = 该维度为空（不打死过滤）`,
-    missingType.total === rawEmptyType && missingType.total > 0,
-    `${missingType.total} vs 库内空值 ${rawEmptyType}`,
-  )
+  if (rawEmptyType === 0) {
+    check(
+      `筛 ${MISSING_LABEL} = 该维度为空（库内没有空值，结果为 0）`,
+      missingType.total === 0,
+      `${missingType.total}`,
+    )
+  } else {
+    check(
+      `筛 ${MISSING_LABEL} = 该维度为空（不打死过滤）`,
+      missingType.total === rawEmptyType && missingType.total > 0,
+      `${missingType.total} vs 库内空值 ${rawEmptyType}`,
+    )
+  }
   check(
     '筛 未标注 的每项都无该维度值',
     missingType.items.every((i) => i[DIM_ITEM_FIELD.type] === MISSING_LABEL),

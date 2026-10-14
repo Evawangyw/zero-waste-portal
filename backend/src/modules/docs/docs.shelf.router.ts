@@ -9,7 +9,6 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { getPrisma } from '../../db/prisma.js'
-import { loadDefaultKnowledgeBaseId } from '../../weknora/index.js'
 import { queryFacets, queryShelf } from './docs.shelf.repo.js'
 import {
   SHELF_MAX_PAGE_SIZE,
@@ -44,7 +43,8 @@ async function handleShelf(req: Request, res: Response): Promise<void> {
 
 async function handleFacets(res: Response): Promise<void> {
   try {
-    const result = await queryFacets(getPrisma(), loadDefaultKnowledgeBaseId())
+    // 书架已经是语料全文，不再按 WeKnora 知识库 ID 收窄，否则筛选项会对不上列表。
+    const result = await queryFacets(getPrisma(), undefined)
     respondOk<ShelfFacetsResponse>(res, result)
   } catch (err) {
     respondError(res, '查询筛选项失败', err)

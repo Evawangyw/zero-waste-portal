@@ -23,6 +23,7 @@ import {
   type PreviewDecision,
 } from './docs.file.types.js'
 import { isMetadataComplete, toMetadataView } from './docs.file.name.js'
+import { CORPUS_SUMMARY_KEY, findCorpusDoc } from './docs.corpus.js'
 
 /** 预览阈值：默认 20MB，可用环境变量 PREVIEW_MAX_BYTES 覆盖（非法值回落默认） */
 export function loadPreviewMaxBytes(): number {
@@ -99,9 +100,9 @@ export async function resolveDocDetail(
 ): Promise<DocDetailResponse | null> {
   const indexed = await findIndexedDoc(prisma, id)
 
-  // 回源拿 description（摘要）与 profile.gist（短摘要），索引里没有这两个字段。
-  // 回源失败不阻断详情：引擎抖一下不该让详情页 500，只把 upstreamAvailable 给 false。
-  const upstream = await fetchKnowledgeSafely(client, id)
+  // 语料编号（复现包 documents.id）的摘要在索引的「内容提要」里，不再回源 WeKnora。
+  const corpus = await findCorpusDoc(id)
+  const upstream = corpus === null ? await fetchKnowledgeSafely(client, id) : null
 
   if (indexed === null && upstream === null) return null
 
@@ -143,7 +144,8 @@ export async function resolveDocForDownload(
   client: WeKnoraClient = WeKnoraClient.fromEnv(),
 ): Promise<ResolvedDocForDownload | null> {
   const indexed = await findIndexedDoc(prisma, id)
-  const upstream = indexed === null ? await fetchKnowledgeSafely(client, id) : null
+  const corpus = await findCorpusDoc(id)
+  const upstream = indexed === null && corpus === null ? await fetchKnowledgeSafely(client, id) : null
   if (indexed === null && upstream === null) return null
 
   const merged: {
@@ -248,7 +250,7 @@ function buildDocDetail(
     fileName,
     fileType,
     fileSize,
-    summary: emptyToNull(upstream?.description ?? ''),
+    summary: emptyToNull(upstream?.description ?? '') ?? readIndexedSummary(indexed),
     gist: emptyToNull(readProfileGist(upstream)),
     folderPath: upstream?.folderPath ?? '',
     parseStatus: upstream?.parseStatus ?? '',
@@ -289,6 +291,12 @@ function firstNonEmpty(candidates: readonly string[]): string {
     if (candidate.trim() !== '') return candidate.trim()
   }
   return ''
+}
+
+function readIndexedSummary(indexed: IndexedDocRow | null): string | null {
+  if (indexed === null) return null
+  const value = indexed.customMetadata[CORPUS_SUMMARY_KEY]
+  return typeof value === 'string' ? emptyToNull(value) : null
 }
 
 function emptyToNull(value: string): string | null {

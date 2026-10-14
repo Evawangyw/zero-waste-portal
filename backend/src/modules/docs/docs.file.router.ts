@@ -12,12 +12,14 @@
 //  - 下载日志在**开流之前**写，保证「已授权的下载尝试」一定留痕（写日志失败不阻断下载）
 import { Router } from 'express'
 import type { Request, Response } from 'express'
+import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { getAuthContext, requireAuth } from '../auth/index.js'
 import type { AuthLocals, AuthRequest } from '../auth/index.js'
 import { getPrisma } from '../../db/prisma.js'
 import { WeKnoraClient } from '../../weknora/index.js'
+import { locateCorpusFile } from './docs.corpus.js'
 import { buildContentDisposition, buildDownloadFileName } from './docs.file.name.js'
 import {
   decidePreview,
@@ -99,19 +101,44 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
     return
   }
 
-  await pipeBinary(res, (signal) => WeKnoraClient.fromEnv().previewStream(id, signal), {
+  const previewName =
+    detail.doc.fileName === '' ? `${detail.doc.id}.${detail.doc.fileType}` : detail.doc.fileName
+  const previewOptions: PipeBinaryOptions = {
     disposition: 'inline',
-    // Content-Type 以引擎实际返回的为准（索引里的 file_type 只是判据）
     contentType: decision.contentType,
-    fileName:
-      detail.doc.fileName === '' ? `${detail.doc.id}.${detail.doc.fileType}` : detail.doc.fileName,
+    fileName: previewName,
     contentLength: decision.sizeBytes,
     extraHeaders: {
-      // 让前端即使不解析 JSON 也能一眼看出阈值（验收④）
       'X-Preview-Max-Bytes': String(decision.maxBytes),
       'X-Preview-Too-Large': 'false',
     },
-  })
+  }
+
+  const located = await locateCorpusFile(id)
+  if (located?.kind === 'missing') {
+    const envelope: PreviewEnvelope = {
+      success: true,
+      preview: {
+        ...decision,
+        streamable: false,
+        unsupported: true,
+        reason: '本机没有这份原文，暂时不能在线预览',
+      },
+      id: detail.doc.id,
+      title: detail.doc.title,
+      fileType: detail.doc.fileType,
+      fileSize: detail.doc.fileSize,
+      downloadUrl: `/api/docs/${encodeURIComponent(detail.doc.id)}/download`,
+    }
+    respondJson<PreviewEnvelope>(res, 200, envelope)
+    return
+  }
+  if (located?.kind === 'file') {
+    await pipeLocalFile(res, located.path, { ...previewOptions, contentLength: located.size })
+    return
+  }
+
+  await pipeBinary(res, (signal) => WeKnoraClient.fromEnv().previewStream(id, signal), previewOptions)
 }
 
 // ------------------------------------------------------------------ 下载
@@ -157,20 +184,66 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
     resolved.fileType,
   )
 
+  const located = await locateCorpusFile(id)
+  if (located?.kind === 'missing') {
+    respondError(res, 404, 'not_found', '本机没有这份原文')
+    return
+  }
+
   // 先写下载日志再开流：已授权的下载尝试必须留痕（看板下载排行）
   await writeDownloadLog(getPrisma(), auth.userId, resolved.id, fileName)
 
-  await pipeBinary(res, (signal) => WeKnoraClient.fromEnv().download(id, signal), {
+  const downloadOptions: PipeBinaryOptions = {
     disposition: 'attachment',
-    // 下载不给可读类型，强制 octet-stream 触发浏览器另存为（引擎本身也这么回）
     contentType: 'application/octet-stream',
     fileName,
-    contentLength: resolved.fileSize,
+    contentLength: located?.kind === 'file' ? located.size : resolved.fileSize,
     extraHeaders: {
       'X-Download-File-Name': encodeURIComponent(fileName),
-      'X-Download-Source': resolved.source,
+      'X-Download-Source': located?.kind === 'file' ? 'corpus' : resolved.source,
     },
-  })
+  }
+  if (located?.kind === 'file') {
+    await pipeLocalFile(res, located.path, downloadOptions)
+    return
+  }
+
+  await pipeBinary(res, (signal) => WeKnoraClient.fromEnv().download(id, signal), downloadOptions)
+}
+
+// ------------------------------------------------------------------ 本机原文
+
+/** 语料 PDF 直接从磁盘流出，不经过 WeKnora，也不把整份文件读进内存。 */
+async function pipeLocalFile(res: Response, filePath: string, options: PipeBinaryOptions): Promise<void> {
+  const stream = createReadStream(filePath)
+  const onClientClose = (): void => {
+    stream.destroy()
+  }
+  res.on('close', onClientClose)
+  try {
+    res.status(200)
+    res.setHeader('Content-Type', options.contentType)
+    res.setHeader('Content-Disposition', buildContentDisposition(options.disposition, options.fileName))
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    if (options.contentLength > 0) {
+      res.setHeader('Content-Length', String(options.contentLength))
+    }
+    for (const [key, value] of Object.entries(options.extraHeaders ?? {})) {
+      res.setHeader(key, value)
+    }
+    await pipeline(stream, res)
+  } catch (err) {
+    if (res.headersSent) {
+      res.destroy(err instanceof Error ? err : new Error(String(err)))
+      return
+    }
+    const detail = err instanceof Error ? err.message : String(err)
+    console.error(`[docs.file] 本机原文读取失败：${detail}`)
+    respondError(res, 502, 'upstream_unavailable', '原文暂时读不出来，请稍后重试')
+  } finally {
+    res.off('close', onClientClose)
+  }
 }
 
 // ------------------------------------------------------------------ 流式透传
@@ -246,15 +319,15 @@ async function pipeBinary(
 // ------------------------------------------------------------------ 工具
 
 /**
- * 资料 ID 白名单校验：只收 UUID（WeKnora 一律 uuid4 实测）。
- * 顺带挡掉路径穿越型输入（../ 之类），避免拼进引擎路径时出问题。
+ * 资料 ID：WeKnora 的 UUID，或复现包 documents.id（纯数字）。
+ * 不收路径分隔符，避免把 ../ 拼进文件路径。
  */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const DOC_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{1,12})$/i
 
 function readId(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
-  return UUID_RE.test(trimmed) ? trimmed : null
+  return DOC_ID_RE.test(trimmed) ? trimmed : null
 }
 
 function respondJson<T>(res: Response, status: number, body: T): void {

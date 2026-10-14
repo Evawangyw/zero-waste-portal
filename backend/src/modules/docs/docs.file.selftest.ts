@@ -339,9 +339,16 @@ async function testDetailResolve(): Promise<void> {
     check('填过元数据那条能解析出详情', detail !== null)
     if (detail !== null) {
       check('source 含 index（索引优先）', detail.source.includes('index'), detail.source)
-      check('upstreamAvailable=true（引擎可达）', detail.upstreamAvailable === true)
-      check('摘要非空（WeKnora description）', (detail.doc.summary ?? '') !== '')
-      eq('年份取自 custom_metadata', detail.metadata.year, '2026')
+      const corpusId = /^\d+$/.test(sample.knowledgeId)
+      if (corpusId) {
+        check('语料资料不回源 WeKnora', detail.upstreamAvailable === false)
+        const indexedYear = sample.year.trim() === '' ? META_MISSING : sample.year
+        eq('年份与索引列一致', detail.metadata.year, indexedYear)
+      } else {
+        check('upstreamAvailable=true（引擎可达）', detail.upstreamAvailable === true)
+        check('摘要非空（WeKnora description）', (detail.doc.summary ?? '') !== '')
+        eq('年份取自 custom_metadata', detail.metadata.year, '2026')
+      }
       check('download.fileName 形如 年份-机构-标题.ext', detail.download.fileName.includes('-'))
     }
   } else {
