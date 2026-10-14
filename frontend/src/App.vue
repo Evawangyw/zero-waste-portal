@@ -11,6 +11,7 @@ import { APP_NAME } from './constants'
 const route = useRoute()
 const router = useRouter()
 const bare = computed(() => route.meta['bare'] === true)
+const askPage = computed(() => route.name === 'home')
 
 onMounted(() => {
   // 登录态恢复：有 token 才拉 /me，失败不打断页面
@@ -41,12 +42,12 @@ watch(
 </script>
 
 <template>
-  <el-container class="app-shell">
+  <el-container class="app-shell" direction="vertical" :class="{ 'ask-shell': askPage }">
     <SiteNav v-if="!bare" />
-    <el-main class="app-main" :class="{ 'app-main-bare': bare }">
+    <el-main class="app-main" :class="{ 'app-main-bare': bare, 'app-main-ask': askPage }">
       <router-view />
     </el-main>
-    <el-footer v-if="!bare" class="app-footer" height="auto">
+    <el-footer v-if="!bare && !askPage" class="app-footer" height="auto">
       <div class="footer-inner">
         <div>
           <p class="footer-name">{{ APP_NAME }}</p>
@@ -93,6 +94,21 @@ watch(
   max-width: none;
   margin: 0;
   padding: 0;
+}
+
+.ask-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-main-ask {
+  --el-main-padding: 0;
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .app-footer {

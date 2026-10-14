@@ -265,7 +265,45 @@ function toLine(message: ChatMessage): TranscriptLine {
 }
 
 function answerBody(content: string): string {
-  return readExtractiveAnswer(content).body
+  const parsed = readExtractiveAnswer(content)
+  if (parsed.sources.length > 0) return parsed.body
+  return content
+    .replace(/\n*参考来源[\s\S]*$/, '')
+    .replace(/\n*@@sources@@[\s\S]*$/, '')
+    .trimEnd()
+}
+
+interface AnswerPiece {
+  readonly kind: 'text' | 'cite'
+  readonly text: string
+  readonly index: number
+}
+
+function answerParagraphs(content: string): readonly string[] {
+  const body = answerBody(content).trim()
+  if (body === '') return []
+  return body.split(/\n{2,}/).map((part) => part.trim()).filter((part) => part !== '')
+}
+
+function answerPieces(paragraph: string): readonly AnswerPiece[] {
+  const pieces: AnswerPiece[] = []
+  const pattern = /\[\[(\d+)\]\]/g
+  let last = 0
+  for (const match of paragraph.matchAll(pattern)) {
+    const index = match.index ?? 0
+    if (index > last) pieces.push({ kind: 'text', text: paragraph.slice(last, index), index: 0 })
+    const cite = Number(match[1])
+    pieces.push({ kind: 'cite', text: match[1] ?? '', index: cite })
+    last = index + match[0].length
+  }
+  if (last < paragraph.length) {
+    pieces.push({ kind: 'text', text: paragraph.slice(last), index: 0 })
+  }
+  return pieces
+}
+
+function sourceByIndex(content: string, index: number): AskSource | undefined {
+  return answerSources(content).find((source) => source.index === index)
 }
 
 function answerSources(content: string): readonly AskSource[] {
@@ -293,271 +331,730 @@ async function scrollToEnd(): Promise<void> {
 </script>
 
 <template>
-  <div v-if="isLoggedIn" class="home">
-    <el-card class="ask-card" shadow="never">
-      <template #header>
-        <div class="ask-head">
-          <span>向知识库提问</span>
-          <div class="ask-actions">
-            <el-select
-              v-if="conversations.length > 1 || messages.length > 0"
-              :model-value="conversationId"
-              size="small"
-              class="conversation-select"
-              :disabled="sending || windowBusy"
-              @change="onSwitchConversation"
-            >
-              <el-option
-                v-for="item in conversations"
-                :key="item.id"
-                :label="conversationLabel(item)"
-                :value="item.id"
+  <div v-if="isLoggedIn" class="assistant">
+    <aside class="sidebar">
+      <button type="button" class="new-chat" :disabled="sending || windowBusy" @click="onNewConversation">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        新对话
+      </button>
+      <p class="history-label">历史对话</p>
+      <div class="history-list">
+        <p v-if="conversations.length === 0" class="history-empty">还没有历史对话</p>
+        <button
+          v-for="item in conversations"
+          :key="item.id"
+          type="button"
+          class="history"
+          :class="{ active: item.id === conversationId }"
+          :disabled="sending || windowBusy"
+          @click="onSwitchConversation(item.id)"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path d="M5 6h14v9H8l-3 3V6z" fill="none" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+          <span>{{ conversationLabel(item) }}</span>
+        </button>
+      </div>
+      <button
+        type="button"
+        class="clear-chat"
+        :disabled="sending || windowBusy || messages.length === 0"
+        @click="onClearConversation"
+      >
+        清空当前对话
+      </button>
+      <div class="sidebar-tip">
+        <b>回答来自原文</b>
+        <p>每条结论都标出来源。点开来源，可以打开对应资料。</p>
+      </div>
+    </aside>
+
+    <section class="chat-column">
+      <div class="mobile-bar">
+        <button type="button" class="new-chat" :disabled="sending || windowBusy" @click="onNewConversation">
+          新对话
+        </button>
+        <button
+          type="button"
+          class="clear-chat"
+          :disabled="sending || windowBusy || messages.length === 0"
+          @click="onClearConversation"
+        >
+          清空
+        </button>
+      </div>
+      <div v-if="conversations.length > 0" class="mobile-history">
+        <button
+          v-for="item in conversations"
+          :key="item.id"
+          type="button"
+          class="history"
+          :class="{ active: item.id === conversationId }"
+          :disabled="sending || windowBusy"
+          @click="onSwitchConversation(item.id)"
+        >
+          {{ conversationLabel(item) }}
+        </button>
+      </div>
+
+      <div ref="transcript" class="chat-main">
+        <div v-if="messages.length === 0" class="chat-welcome">
+          <div class="ai-orb" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28">
+              <path
+                d="M12 20c0-5.2 1.6-8 7-9.6C17.6 16 14.8 20 12 20Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linejoin="round"
               />
-            </el-select>
-            <el-button size="small" :disabled="sending || windowBusy" @click="onNewConversation">
-              新对话
-            </el-button>
-            <el-button
-              size="small"
-              :disabled="sending || windowBusy || messages.length === 0"
-              @click="onClearConversation"
+              <path
+                d="M12 20C12 14.8 10.4 12 5 10.4 6.4 16 9.2 20 12 20Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+              />
+              <path d="M12 20V11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+          </div>
+          <p class="kicker">零废弃知识库</p>
+          <h1>向知识库提问</h1>
+          <p>汇集政策、研究、标准与一线案例。回答从原文抽取，并附上可以打开的来源。</p>
+          <div class="quick-grid">
+            <button
+              v-for="item in SAMPLE_QUESTIONS"
+              :key="item.text"
+              type="button"
+              :disabled="sending"
+              @click="onSampleQuestion(item.text)"
             >
-              清空
-            </el-button>
+              <span>{{ item.scene }}</span>
+              {{ item.text }}
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
           </div>
         </div>
-      </template>
 
-      <div ref="transcript" class="transcript">
-        <p v-if="messages.length === 0" class="empty-hint">
-          直接输入问题。新对话会另开一轮，以前的记录可以在上面切回去。清空只删掉当前这一轮。
-        </p>
-        <div
-          v-for="line in messages"
-          :key="line.id"
-          class="turn"
-          :class="line.role === 'user' ? 'turn-user' : 'turn-assistant'"
-        >
-          <p class="role">{{ line.role === 'user' ? '我' : '助手' }}</p>
-          <div
-            v-if="line.role === 'assistant' && (line.thinking !== '' || (sending && line.id === liveId))"
-            class="thinking"
-          >
-            <p class="thinking-label">思考过程</p>
-            <p class="thinking-body">{{ line.thinking === '' ? '正在思考…' : line.thinking }}</p>
-          </div>
-          <p v-if="answerBody(line.content) !== ''" class="bubble">{{ answerBody(line.content) }}</p>
-          <ul v-if="line.role === 'assistant' && answerSources(line.content).length > 0" class="sources">
-            <li v-for="source in answerSources(line.content)" :key="source.index">
-              <button type="button" class="source-link" @click="openSource(source.docId)">
-                [[{{ source.index }}]] {{ source.title }}
-              </button>
-              <span v-if="sourceMeta(source) !== ''" class="source-meta">{{ sourceMeta(source) }}</span>
-            </li>
-          </ul>
+        <div v-else class="conversation">
+          <template v-for="line in messages" :key="line.id">
+            <div v-if="line.role === 'user'" class="user-message">
+              <span>{{ line.content }}</span>
+            </div>
+            <article v-else class="answer-block">
+              <div class="ai-avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path
+                    d="M12 19c0-4.4 1.4-6.8 6-8.2C16.6 15.2 14.2 19 12 19Z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M12 19C12 14.6 10.6 12.2 6 10.8 7.4 15.2 9.8 19 12 19Z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linejoin="round"
+                  />
+                  <path d="M12 19v-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </div>
+              <div class="answer-content">
+                <div
+                  v-if="line.thinking !== '' || (sending && line.id === liveId && answerBody(line.content) === '')"
+                  class="thinking"
+                >
+                  <i /><i /><i />
+                  <span>{{ line.thinking === '' ? '正在从原文里查找…' : line.thinking }}</span>
+                </div>
+                <div v-if="answerParagraphs(line.content).length > 0" class="answer-list">
+                  <p v-for="(paragraph, paragraphIndex) in answerParagraphs(line.content)" :key="paragraphIndex">
+                    <template v-for="(piece, pieceIndex) in answerPieces(paragraph)" :key="pieceIndex">
+                      <button
+                        v-if="piece.kind === 'cite'"
+                        type="button"
+                        class="inline-citation"
+                        @click="openSource(sourceByIndex(line.content, piece.index)?.docId ?? '')"
+                      >
+                        {{ piece.text }}
+                      </button>
+                      <template v-else>{{ piece.text }}</template>
+                    </template>
+                  </p>
+                </div>
+                <div v-if="answerSources(line.content).length > 0" class="sources">
+                  <h3>参考来源</h3>
+                  <button
+                    v-for="source in answerSources(line.content)"
+                    :key="source.index"
+                    type="button"
+                    class="citation"
+                    @click="openSource(source.docId)"
+                  >
+                    <span>{{ source.index }}</span>
+                    <div>
+                      <b>{{ source.title }}</b>
+                      <small v-if="sourceMeta(source) !== ''">{{ sourceMeta(source) }}</small>
+                    </div>
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                      <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </article>
+          </template>
         </div>
       </div>
 
-      <div v-if="messages.length === 0" class="samples">
-        <el-button
-          v-for="item in SAMPLE_QUESTIONS"
-          :key="item.text"
-          plain
-          :disabled="sending"
-          @click="onSampleQuestion(item.text)"
-        >
-          {{ item.text }}
-        </el-button>
-      </div>
-
-      <div class="custom-ask">
-        <el-input
-          v-model="customQuestion"
-          placeholder="例如：社区厨余堆肥活动怎么设计？"
-          clearable
-          :disabled="sending"
-          @keyup.enter="onCustomAsk"
-        />
-        <el-button type="primary" :loading="sending" @click="onCustomAsk">发送</el-button>
-      </div>
-    </el-card>
+      <form class="composer-wrap" @submit.prevent="onCustomAsk">
+        <div class="composer">
+          <textarea
+            v-model="customQuestion"
+            rows="1"
+            placeholder="例如：社区厨余堆肥活动怎么设计？"
+            :disabled="sending"
+            @keydown.enter.exact.prevent="onCustomAsk"
+          />
+          <button type="submit" :disabled="sending || customQuestion.trim() === ''" aria-label="发送">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
+        <small>回答依据库内原文，具体执行以官方文件为准</small>
+      </form>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.home {
+.assistant {
+  --ask-green: #017c40;
+  --ask-deep: #014d28;
+  --ask-paper: #f4faf6;
+  --ask-sidebar: #e7f3ec;
+  --ask-ink: #1c3328;
+  --ask-muted: #5c6f64;
+  --ask-line: rgba(1, 124, 64, 0.16);
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--ask-paper);
+  color: var(--ask-ink);
+}
+
+.sidebar {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  padding: 22px 16px;
+  border-right: 1px solid var(--ask-line);
+  background: var(--ask-sidebar);
 }
 
-.ask-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.ask-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ask-actions :deep(.el-button + .el-button) {
-  margin-left: 0;
-}
-
-.conversation-select {
-  width: 180px;
-}
-
-.transcript {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-height: 220px;
-  max-height: min(62vh, 640px);
-  overflow-y: auto;
-  margin-bottom: 16px;
-  padding-right: 4px;
-}
-
-.empty-hint {
-  margin: 0;
-  color: #6b7280;
-  line-height: 1.7;
-}
-
-.turn {
-  display: flex;
-  flex-direction: column;
-  max-width: 85%;
-}
-
-.turn-user {
-  align-self: flex-end;
-  align-items: flex-end;
-}
-
-.turn-assistant {
-  align-self: flex-start;
-  align-items: flex-start;
-}
-
-.role {
-  margin: 0 0 4px;
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.bubble {
-  margin: 0;
-  padding: 10px 12px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border: 1px solid var(--zw-line);
-}
-
-.turn-user .bubble {
-  background: #1f7a4d;
-  color: #fff;
-  border-color: #1f7a4d;
-}
-
-.turn-assistant .bubble {
-  background: #f7f7f5;
-}
-
-.sources {
-  width: 100%;
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.sources li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 6px;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid var(--zw-line);
-}
-
-.source-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #017c40;
+.new-chat,
+.clear-chat,
+.history,
+.quick-grid button,
+.inline-citation,
+.citation,
+.composer button {
   font: inherit;
-  line-height: 1.5;
-  text-align: left;
   cursor: pointer;
 }
 
-.source-meta {
-  color: #6b7280;
+.new-chat:disabled,
+.clear-chat:disabled,
+.history:disabled,
+.quick-grid button:disabled,
+.composer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.new-chat {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 11px;
+  border: 1px solid var(--ask-green);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ask-green);
+  font-weight: 700;
+}
+
+.new-chat:hover:not(:disabled) {
+  background: #fff;
+}
+
+.history-label {
+  margin: 26px 8px 8px;
+  color: #7d9186;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.history-empty {
+  margin: 8px 10px;
+  color: var(--ask-muted);
   font-size: 12px;
-  line-height: 1.5;
+}
+
+.history {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #4d6358;
+  font-size: 13px;
+  text-align: left;
+}
+
+.history span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history.active,
+.history:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ask-deep);
+}
+
+.clear-chat {
+  margin-top: 12px;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ask-green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sidebar-tip {
+  margin-top: auto;
+  padding: 16px;
+  border: 1px solid var(--ask-line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ask-green);
+}
+
+.sidebar-tip b {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.sidebar-tip p {
+  margin: 0;
+  color: var(--ask-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.chat-column {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mobile-bar,
+.mobile-history {
+  display: none;
+}
+
+.chat-main {
+  height: 100%;
+  overflow-y: auto;
+  padding-bottom: 128px;
+}
+
+.chat-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 820px;
+  min-height: calc(100% - 20px);
+  margin: 0 auto;
+  padding: 72px 36px 40px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.ai-orb,
+.ai-avatar {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--ask-green);
+}
+
+.ai-orb {
+  width: 66px;
+  height: 66px;
+  margin-bottom: 18px;
+  border-radius: 22px 22px 22px 8px;
+  box-shadow: 0 14px 30px rgba(1, 124, 64, 0.22);
+}
+
+.kicker {
+  margin: 0;
+  color: var(--ask-green);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.chat-welcome h1 {
+  margin: 10px 0;
+  color: var(--ask-deep);
+  font-family: 'Songti SC', 'Noto Serif SC', 'STSong', serif;
+  font-size: 40px;
+  font-weight: 700;
+}
+
+.chat-welcome > p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--ask-muted);
+  line-height: 1.8;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  margin-top: 32px;
+}
+
+.quick-grid button {
+  position: relative;
+  min-height: 116px;
+  padding: 18px 36px 18px 18px;
+  border: 1px solid var(--ask-line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ask-ink);
+  line-height: 1.65;
+  text-align: left;
+  transition: 0.2s ease;
+}
+
+.quick-grid button:hover:not(:disabled) {
+  border-color: rgba(1, 124, 64, 0.4);
+  box-shadow: 0 12px 30px rgba(1, 92, 48, 0.08);
+  transform: translateY(-3px);
+}
+
+.quick-grid button span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ask-green);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.quick-grid button svg {
+  position: absolute;
+  right: 14px;
+  bottom: 16px;
+  color: var(--ask-green);
+}
+
+.conversation {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 42px 36px 20px;
+}
+
+.user-message {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 28px;
+}
+
+.user-message span {
+  max-width: 72%;
+  padding: 13px 16px;
+  border-radius: 16px 4px 16px 16px;
+  background: #d7eadf;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.answer-block {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 34px;
+}
+
+.ai-avatar {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px 11px 11px 4px;
+}
+
+.answer-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .thinking {
-  width: 100%;
-  margin-bottom: 8px;
-  padding: 8px 10px;
-  background: #f3faf6;
-  border: 1px solid #d7eadf;
-  border-left: 3px solid #017c40;
-}
-
-.thinking-label {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #017c40;
-}
-
-.thinking-body {
-  margin: 0;
-  max-height: 180px;
-  overflow-y: auto;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  color: var(--ask-muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.thinking i {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--ask-green);
+  animation: pulse 1s infinite;
+}
+
+.thinking i:nth-of-type(2) {
+  animation-delay: 0.15s;
+}
+
+.thinking i:nth-of-type(3) {
+  animation-delay: 0.3s;
+}
+
+.thinking span {
   white-space: pre-wrap;
-  word-break: break-word;
-  color: #3d4a42;
 }
 
-.custom-ask {
-  display: flex;
-  gap: 12px;
+.answer-list p {
+  margin: 0 0 14px;
+  color: #3e5248;
+  font-size: 15px;
+  line-height: 1.9;
 }
 
-.samples {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  margin-bottom: 16px;
+.inline-citation {
+  margin: 0 3px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(1, 124, 64, 0.12);
+  color: var(--ask-deep);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
 }
 
-.samples :deep(.el-button) {
+.inline-citation:hover {
+  background: var(--ask-green);
+  color: #fff;
+}
+
+.sources {
+  margin-top: 8px;
+  padding: 16px 16px 6px;
+  border-radius: 13px;
+  background: #e7f3ec;
+}
+
+.sources h3 {
+  margin: 0 0 4px;
+  color: #5d7266;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.citation {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 16px;
+  gap: 10px;
+  align-items: center;
   width: 100%;
-  margin-left: 0;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--ask-line);
+  background: transparent;
+  text-align: left;
 }
 
-@media (max-width: 640px) {
-  .ask-head,
-  .ask-actions,
-  .custom-ask {
-    flex-direction: column;
-    align-items: stretch;
+.citation:first-of-type {
+  border-top: 0;
+}
+
+.citation > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--ask-green);
+  color: #fff;
+  font-size: 11px;
+}
+
+.citation b,
+.citation small {
+  display: block;
+}
+
+.citation b {
+  color: var(--ask-ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.citation small {
+  margin-top: 3px;
+  color: #7b8d83;
+  font-size: 12px;
+}
+
+.citation svg {
+  color: var(--ask-green);
+}
+
+.composer-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 5;
+  width: min(740px, calc(100% - 40px));
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid rgba(1, 124, 64, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 40px rgba(1, 77, 40, 0.12);
+}
+
+.composer textarea {
+  flex: 1;
+  min-height: 26px;
+  max-height: 90px;
+  padding: 8px 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--ask-ink);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.composer button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 11px;
+  background: var(--ask-green);
+  color: #fff;
+}
+
+.composer-wrap small {
+  display: block;
+  margin-top: 8px;
+  color: #8aa093;
+  font-size: 11px;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+    transform: translateY(-3px);
+  }
+}
+
+@media (max-width: 860px) {
+  .assistant {
+    grid-template-columns: 1fr;
   }
 
-  .conversation-select {
-    width: 100%;
+  .sidebar {
+    display: none;
+  }
+
+  .mobile-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 12px 16px 0;
+  }
+
+  .mobile-bar .new-chat,
+  .mobile-bar .clear-chat {
+    width: auto;
+    padding: 8px 12px;
+  }
+
+  .mobile-history {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px 0;
+    overflow-x: auto;
+  }
+
+  .mobile-history .history {
+    flex: none;
+    width: auto;
+    max-width: 180px;
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  .chat-welcome {
+    padding: 36px 18px 24px;
+  }
+
+  .chat-welcome h1 {
+    font-size: 30px;
+  }
+
+  .quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .conversation {
+    padding: 28px 16px 12px;
   }
 }
 </style>
