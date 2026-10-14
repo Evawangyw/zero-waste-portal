@@ -25,9 +25,11 @@
     "test:track": "tsx src/modules/track/track.selftest.ts",
     "test:ask-history": "tsx src/modules/ask/ask.history.selftest.ts",
     "test:ask-extract": "tsx src/modules/ask/ask.extract.selftest.ts",
+    "test:ask-retrieve": "tsx src/modules/ask/ask.retrieve.selftest.ts",
     "admin:promote": "tsx src/modules/track/track.admin.cli.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
     "express": "^4.21.2",

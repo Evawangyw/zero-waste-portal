@@ -1,0 +1,119 @@
+// 词法召回和向量召回按名次融合，再交给抽取式回答。向量索引未完成时先只用词法。
+import type { ExtractHit } from './ask.extract.js'
+import { BM25Index } from './ask.bm25.js'
+import type { CorpusChunk } from './ask.corpus.js'
+import { loadCorpus } from './ask.corpus.js'
+import { buildVectorMatrix, embedTexts, loadVectorMatrix, queryText, searchVectors } from './ask.embed.js'
+import { fuseRanks } from './ask.fusion.js'
+
+const LEXICAL_K = 80
+const VECTOR_K = 80
+const FUSED_K = 40
+
+export interface RetrieveResult {
+  readonly hits: readonly ExtractHit[]
+  readonly lexicalCount: number
+  readonly vectorCount: number
+  readonly vectorReady: boolean
+  readonly vectorDone: number
+  readonly vectorTotal: number
+}
+
+interface Engine {
+  readonly chunks: readonly CorpusChunk[]
+  readonly byId: ReadonlyMap<number, CorpusChunk>
+  readonly bm25: BM25Index
+  vectors: Float32Array | null
+  vectorDim: number
+  vectorReady: boolean
+  vectorDone: number
+  vectorTotal: number
+}
+
+let engineTask: Promise<Engine> | null = null
+
+export function retrieve(query: string): Promise<RetrieveResult> {
+  engineTask ??= openEngine()
+  return engineTask.then((engine) => search(engine, query))
+}
+
+async function openEngine(): Promise<Engine> {
+  const chunks = await loadCorpus()
+  const bm25 = new BM25Index()
+  const byId = new Map<number, CorpusChunk>()
+  for (const chunk of chunks) {
+    byId.set(chunk.chunkId, chunk)
+    bm25.add(chunk.chunkId, chunk.content)
+  }
+  const cached = loadVectorMatrix(chunks.map((chunk) => chunk.chunkId))
+  const engine: Engine = {
+    chunks,
+    byId,
+    bm25,
+    vectors: cached?.data ?? null,
+    vectorDim: cached?.dim ?? 0,
+    vectorReady: cached !== null,
+    vectorDone: cached === null ? 0 : chunks.length,
+    vectorTotal: chunks.length,
+  }
+  if (!engine.vectorReady) void warmVectors(engine)
+  else console.log(`[ask] 已载入语料 ${chunks.length} 条，向量索引就绪`)
+  return engine
+}
+
+async function warmVectors(engine: Engine): Promise<void> {
+  try {
+    console.log(`[ask] 开始构建向量索引，共 ${engine.vectorTotal} 条`)
+    const matrix = await buildVectorMatrix(engine.chunks)
+    const dim = engine.chunks.length === 0 ? 0 : matrix.length / engine.chunks.length
+    engine.vectors = matrix
+    engine.vectorDim = dim
+    engine.vectorDone = engine.chunks.length
+    engine.vectorReady = true
+    console.log('[ask] 向量索引已就绪')
+  } catch (err) {
+    console.error('[ask] 向量索引构建失败，问答继续只用词法召回', err)
+  }
+}
+
+async function search(engine: Engine, query: string): Promise<RetrieveResult> {
+  const lexical = engine.bm25.search(query, LEXICAL_K)
+  const lexicalIds = new Set(lexical.map((hit) => hit.id))
+  let vector: { id: number; score: number }[] = []
+  if (engine.vectorReady && engine.vectors !== null) {
+    const embedded = await embedTexts([queryText(query)])
+    const row = embedded.data
+    vector = searchVectors(engine.vectors, engine.vectorDim, engine.chunks.map((chunk) => chunk.chunkId), row, VECTOR_K)
+  }
+  const vectorOnly = new Set(vector.map((hit) => hit.id).filter((id) => !lexicalIds.has(id)))
+  const fused = fuseRanks([lexical.map((hit) => hit.id), vector.map((hit) => hit.id)], FUSED_K)
+  const hits: ExtractHit[] = []
+  for (const item of fused) {
+    const chunk = engine.byId.get(item.id)
+    if (chunk === undefined) continue
+    hits.push({
+      knowledgeId: String(chunk.documentId),
+      title: chunk.title,
+      content: chunk.content,
+      score: item.score,
+      customMetadataText: metaText(chunk),
+      channel: vectorOnly.has(item.id) ? 'vector' : 'lexical',
+    })
+  }
+  return {
+    hits,
+    lexicalCount: lexical.length,
+    vectorCount: vector.length,
+    vectorReady: engine.vectorReady,
+    vectorDone: engine.vectorDone,
+    vectorTotal: engine.vectorTotal,
+  }
+}
+
+function metaText(chunk: CorpusChunk): string {
+  return [
+    `知识类型: ${chunk.docType}`,
+    `知识发布机构: ${chunk.organization}`,
+    `知识发布年份: ${chunk.year}`,
+  ].join('\n')
+}

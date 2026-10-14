@@ -4,7 +4,7 @@
 export interface AskRequestBody {
   readonly query: string
   readonly knowledgeBaseIds?: readonly string[] | undefined
-  /** 是否把 WeKnora 的思考过程也透出（默认只透正文） */
+  /** 是否把本次召回说明也透出（默认只透正文） */
   readonly includeThinking?: boolean | undefined
 }
 

@@ -1,5 +1,5 @@
-// 契约（ask 模块内）：把 WeKnora 检索片段抽成带 [[n]] 的原文回答。
-// 不调用对话模型。栏目不按垃圾分类写死，句子只按和问句的词面重合来取。
+// 契约（ask 模块内）：把融合后的检索片段抽成带 [[n]] 的原文回答。
+// 不调用对话模型。词法命中的句子按字面重合来取；向量单独召回的片段另留少量原句。
 // 回答末尾的 @@sources@@ 与前端 readExtractiveAnswer 是同一标记，改一边必须改另一边。
 
 export const EXTRACT_SOURCE_MARK = '@@sources@@'
@@ -10,6 +10,8 @@ export interface ExtractHit {
   readonly content: string
   readonly score: number
   readonly customMetadataText: string
+  /** 缺省按词法命中处理。向量单独召回的片段允许在没有共同字面时留下少量原句。 */
+  readonly channel?: 'lexical' | 'vector'
 }
 
 export interface ExtractiveSource {
@@ -158,6 +160,8 @@ const GEO_KEYWORDS = [
 const MAX_DOCS = 6
 const MAX_SENTENCES = 6
 const PER_DOC_SENTENCES = 3
+const VECTOR_PER_DOC = 2
+const VECTOR_GLOBAL = 4
 const DOC_CUTOFF = 0.22
 const SENTENCE_CUTOFF = 0.45
 
@@ -172,6 +176,7 @@ interface DocBucket {
   readonly title: string
   readonly meta: DocMeta
   readonly chunks: readonly string[]
+  readonly vectorChunks: readonly string[]
   score: number
   rscore: number
   titleGeoHit: boolean
@@ -181,6 +186,7 @@ interface ScoredSentence {
   readonly text: string
   readonly score: number
   readonly doc: DocBucket
+  readonly vectorOnly: boolean
 }
 
 export function composeExtractiveAnswer(
@@ -199,7 +205,7 @@ export function composeExtractiveAnswer(
   const docs = rankDocs(hits, queryGeo, cores)
   if (docs.length === 0) return emptyAnswer(EMPTY_NOTICE)
 
-  const sentences = pickSentences(docs, strong, queryGeo, cores)
+  const sentences = pickSentences(docs, strong, queryGeo)
   if (sentences.length === 0) return emptyAnswer(WEAK_NOTICE)
 
   const sources: ExtractiveSource[] = []
@@ -247,13 +253,23 @@ function rankDocs(
   queryGeo: ReadonlySet<string>,
   cores: readonly string[],
 ): DocBucket[] {
-  const byDoc = new Map<string, { hit: ExtractHit; chunks: string[]; scores: number[] }>()
+  const byDoc = new Map<
+    string,
+    { hit: ExtractHit; chunks: string[]; vectorChunks: string[]; scores: number[] }
+  >()
   for (const hit of hits) {
     const cur = byDoc.get(hit.knowledgeId)
+    const intoVector = hit.channel === 'vector'
     if (cur === undefined) {
-      byDoc.set(hit.knowledgeId, { hit, chunks: [hit.content], scores: [hit.score] })
+      byDoc.set(hit.knowledgeId, {
+        hit,
+        chunks: intoVector ? [] : [hit.content],
+        vectorChunks: intoVector ? [hit.content] : [],
+        scores: [hit.score],
+      })
     } else {
-      cur.chunks.push(hit.content)
+      if (intoVector) cur.vectorChunks.push(hit.content)
+      else cur.chunks.push(hit.content)
       cur.scores.push(hit.score)
     }
   }
@@ -270,6 +286,7 @@ function rankDocs(
       title,
       meta,
       chunks: group.chunks,
+      vectorChunks: group.vectorChunks,
       score,
       rscore: score,
       titleGeoHit,
@@ -277,9 +294,13 @@ function rankDocs(
   }
 
   for (const doc of docs) {
-    const blob = `${doc.title}\n${doc.chunks.join('\n')}`.toLowerCase()
+    const blob = `${doc.title}\n${doc.chunks.join('\n')}\n${doc.vectorChunks.join('\n')}`.toLowerCase()
     const coreHits = cores.filter((core) => blob.includes(core)).length
-    const geoBoost = doc.titleGeoHit ? 15 : queryGeoMentions(doc.chunks, queryGeo) ? 1.8 : 1
+    const geoBoost = doc.titleGeoHit
+      ? 15
+      : queryGeoMentions([...doc.chunks, ...doc.vectorChunks], queryGeo)
+        ? 1.8
+        : 1
     const auth = AUTH_WEIGHT[doc.meta.docType] ?? 1
     doc.rscore = doc.score * (1 + coreHits) * auth * geoBoost
   }
@@ -303,16 +324,15 @@ function pickSentences(
   docs: readonly DocBucket[],
   strong: ReadonlySet<string>,
   queryGeo: ReadonlySet<string>,
-  cores: readonly string[],
 ): ScoredSentence[] {
   const picked: ScoredSentence[] = []
   for (const doc of docs) {
     const ranked = doc.chunks
       .flatMap((chunk) => splitSentences(chunk))
-      .map((text) => ({ text, score: scoreSentence(text, strong), doc }))
+      .map((text) => ({ text, score: scoreSentence(text, strong), doc, vectorOnly: false }))
       .filter((item) => item.score > 0)
       .filter((item) => hitsChineseIfAsked(item.text, strong))
-      .filter((item) => acceptsSentence(item.text, doc, cores))
+      .filter((item) => acceptsSentence(item.text))
       .filter((item) => keepForGeo(item.text, doc, queryGeo))
       .sort((a, b) => b.score - a.score)
     const seen: string[] = []
@@ -322,10 +342,23 @@ function pickSentences(
       seen.push(item.text)
       picked.push(item)
     }
+    const vectorRanked = doc.vectorChunks
+      .flatMap((chunk) => splitSentences(chunk))
+      .map((text) => ({ text, score: scoreSentence(text, strong), doc, vectorOnly: true }))
+      .filter((item) => keepForGeo(item.text, doc, queryGeo))
+      .sort((a, b) => b.score - a.score)
+    let vectorKept = 0
+    for (const item of vectorRanked) {
+      if (vectorKept >= VECTOR_PER_DOC) break
+      if (seen.some((prev) => isDup(prev, item.text))) continue
+      seen.push(item.text)
+      picked.push(item)
+      vectorKept += 1
+    }
   }
   const best = picked.reduce((max, item) => (item.score > max ? item.score : max), 0)
   const floor = best * SENTENCE_CUTOFF
-  const survivors = picked.filter((item) => item.score >= floor)
+  const survivors = picked.filter((item) => item.vectorOnly || item.score >= floor)
   const ordered = [...survivors].sort((a, b) => {
     const ai = typeRank(a.doc.meta.docType)
     const bi = typeRank(b.doc.meta.docType)
@@ -335,10 +368,13 @@ function pickSentences(
   })
   const globalSeen: string[] = []
   const out: ScoredSentence[] = []
+  let vectorKept = 0
   for (const item of ordered) {
     if (out.length >= MAX_SENTENCES) break
+    if (item.vectorOnly && vectorKept >= VECTOR_GLOBAL) continue
     if (globalSeen.some((prev) => isDup(prev, item.text))) continue
     globalSeen.push(item.text)
+    if (item.vectorOnly) vectorKept += 1
     out.push(item)
   }
   return out
@@ -350,13 +386,11 @@ function hitsChineseIfAsked(text: string, strong: ReadonlySet<string>): boolean 
   return chinese.some((term) => text.includes(term))
 }
 
-function acceptsSentence(text: string, doc: DocBucket, cores: readonly string[]): boolean {
+function acceptsSentence(text: string): boolean {
   const compact = text.replace(/\s+/g, '')
   if (compact.includes('参考文献') || compact.includes('专利') || compact.includes('起草')) return false
   if (/\[\s*\d+\s*\]/.test(text)) return false
-  const top = cores[0]
-  if (top === undefined) return true
-  return `${doc.title}\n${text}`.toLowerCase().includes(top)
+  return true
 }
 
 function keepForGeo(text: string, doc: DocBucket, queryGeo: ReadonlySet<string>): boolean {

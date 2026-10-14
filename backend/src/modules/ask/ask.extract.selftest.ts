@@ -61,6 +61,20 @@ function main(): void {
   check('问上海时保留上海条例', geo.answer.includes('上海市实行生活垃圾分类制度'), failed)
   check('问上海时不写北京条例的句子', !geo.answer.includes('北京市产生生活垃圾'), failed)
 
+  const vectorOnly = composeExtractiveAnswer('生产者责任延伸制度如何落实', [
+    hit({
+      knowledgeId: 'wet',
+      title: '厨余垃圾投放指引',
+      channel: 'vector',
+      content: '湿垃圾应破袋后投入收集容器，日产日清。',
+    }),
+  ])
+  check(
+    '向量单独召回、字面不重合的原句仍留下',
+    vectorOnly.answer.includes('湿垃圾应破袋后投入收集容器'),
+    failed,
+  )
+
   const none = composeExtractiveAnswer('完全无关的问题', [])
   check('没有命中时说明库内没有依据', none.mode === 'empty' && none.answer.includes('未检索到'), failed)
   check('没有命中时不带来源标记', !none.answer.includes('@@sources@@'), failed)
