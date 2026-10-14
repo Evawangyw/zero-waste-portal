@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>零废弃知识库 · 展示</title>
+    <style>
+      :root { --green: #017c40; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #111; color: #fff; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+      body { display: flex; flex-direction: column; min-height: 100%; }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 16px;
+        background: #143024;
+      }
+      header strong { font-size: 15px; }
+      header span { color: #c9e6d6; font-size: 13px; }
+      nav { margin-left: auto; display: flex; gap: 8px; }
+      button {
+        border: 1px solid rgba(255,255,255,.4);
+        background: transparent;
+        color: #fff;
+        padding: 6px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button[aria-current="true"] { background: var(--green); border-color: var(--green); }
+      main { flex: 1; display: grid; place-items: center; padding: 12px; }
+      img { width: min(1440px, 100%); height: auto; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>零废弃知识库</strong>
+      <span>当前站点画面，供查看版式</span>
+      <nav>
+        <button type="button" data-src="foundation.png" aria-current="true">基金会</button>
+        <button type="button" data-src="shelf.png">资料书架</button>
+        <button type="button" data-src="detail.png">资料详情</button>
+      </nav>
+    </header>
+    <main>
+      <img id="shot" src="foundation.png" alt="基金会介绍页" />
+    </main>
+    <script>
+      const shot = document.getElementById("shot")
+      const buttons = document.querySelectorAll("button[data-src]")
+      for (const button of buttons) {
+        button.addEventListener("click", () => {
+          shot.src = button.dataset.src
+          shot.alt = button.textContent
+          for (const item of buttons) item.removeAttribute("aria-current")
+          button.setAttribute("aria-current", "true")
+        })
+      }
+    </script>
+  </body>
+</html>
