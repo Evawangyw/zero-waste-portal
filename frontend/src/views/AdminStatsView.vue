@@ -93,13 +93,18 @@ const searchChart = computed(() => searchHeatmap(summary.value?.topSearchTerms ?
 
 const downloadChart = computed(() =>
   rankedBar(
-    summary.value?.topDownloads.map((row) => ({ name: row.fileName, value: row.count })) ?? [],
+    summary.value?.topDownloads.map((row) => ({
+      name: downloadTitle(row.fileName),
+      value: row.count,
+    })) ?? [],
+    168,
+    'break',
   ),
 )
 
 const askTermHeight = computed(() => chartHeight(summary.value?.topAskTerms.length ?? 0))
 const searchHeight = computed(() => heatmapHeight(summary.value?.topSearchTerms.length ?? 0))
-const downloadHeight = computed(() => chartHeight(summary.value?.topDownloads.length ?? 0))
+const downloadHeight = computed(() => Math.max(120, (summary.value?.topDownloads.length ?? 0) * 56))
 
 // ---------------------------------------------------------------- 取数
 
@@ -135,10 +140,21 @@ function openShelf(term: string): void {
   void router.push({ path: '/shelf', query: { q: term } })
 }
 
-function openDownload(fileName: string): void {
-  const row = summary.value?.topDownloads.find((item) => item.fileName === fileName)
+function openDownload(label: string): void {
+  const row = summary.value?.topDownloads.find(
+    (item) => item.fileName === label || downloadTitle(item.fileName) === label,
+  )
   if (row === undefined) return
   void router.push(docLink(row.docId))
+}
+
+/** 下载文件名是「年份-机构-标题.ext」。图上只留标题，避免年份和机构把柱子挤没。 */
+function downloadTitle(fileName: string): string {
+  const base = fileName.replace(/\.[a-z0-9]{1,8}$/iu, '')
+  const parts = base.split('-')
+  const year = parts[0] ?? ''
+  if (parts.length >= 3 && /^\d{4}$/u.test(year)) return parts.slice(2).join('-')
+  return base === '' ? fileName : base
 }
 
 // ---------------------------------------------------------------- 展示辅助
@@ -251,6 +267,7 @@ function readHeatCount(raw: unknown): number {
 function rankedBar(
   rows: readonly { readonly name: string; readonly value: number }[],
   labelWidth = 160,
+  overflow: 'truncate' | 'break' = 'truncate',
 ): EChartsCoreOption {
   const ordered = [...rows].reverse()
   return barOption(
@@ -258,6 +275,7 @@ function rankedBar(
     ordered.map((row) => row.value),
     true,
     labelWidth,
+    overflow,
   )
 }
 
@@ -266,6 +284,7 @@ function barOption(
   values: number[],
   horizontal: boolean,
   labelWidth = 160,
+  overflow: 'truncate' | 'break' = 'truncate',
 ): EChartsCoreOption {
   return {
     color: [GREEN],
@@ -282,7 +301,7 @@ function barOption(
       ? {
           type: 'category',
           data: categories,
-          axisLabel: { color: INK, width: labelWidth, overflow: 'truncate' },
+          axisLabel: { color: INK, width: labelWidth, overflow, lineHeight: 16 },
         }
       : { type: 'value', min: 0, minInterval: 1, axisLabel: { color: INK } },
     series: [
