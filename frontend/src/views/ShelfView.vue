@@ -132,6 +132,8 @@ function facetChoices(
  * 分页/排序/URL 回填触发的加载不会置位，故不会把翻页算成一次检索。
  */
 let pendingSearchTrack: { readonly term: string } | null = null
+/** 从带 q= 的地址直接打开书架时，补记一次检索。点搜索按钮的那次仍走 pendingSearchTrack。 */
+let trackArrivalQuery = false
 
 /** 生效筛选（多选维度数量），用于筛选区折叠提示 */
 const activeFilterCount = computed(
@@ -178,6 +180,8 @@ async function loadList(): Promise<void> {
   // 取走并清空标记：这一批数据无论成功失败都只上报一次
   const pending = pendingSearchTrack
   pendingSearchTrack = null
+  const arrivalTerm = trackArrivalQuery ? keyword.value.trim() : ''
+  trackArrivalQuery = false
   const query: ShelfQueryInput = {
     type: filters.type,
     org: filters.org,
@@ -193,9 +197,10 @@ async function loadList(): Promise<void> {
     items.value = response.items
     total.value = response.total
     totalPages.value = response.totalPages
-    if (pending !== null) {
+    const trackedTerm = pending?.term ?? arrivalTerm
+    if (trackedTerm !== '') {
       trackSearch({
-        term: pending.term,
+        term: trackedTerm,
         total: response.total,
         zeroResult: response.zeroResult,
         filters: {
@@ -402,6 +407,7 @@ onMounted(() => {
   measureShelf()
   window.addEventListener('resize', measureShelf)
   hydrateFromRoute()
+  trackArrivalQuery = keyword.value.trim() !== ''
   void loadFacets()
   void loadList()
 })

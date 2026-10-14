@@ -31,6 +31,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     registeredUsers,
     eventRows,
     topSearchTerms,
+    shelfSearchPaths,
     zeroResultSearchTerms,
     topAskTerms,
     topDownloads,
@@ -59,6 +60,11 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
       GROUP BY "term"
       ORDER BY COUNT(*) DESC, "term" ASC
       LIMIT ${STATS_TOP_LIMIT}
+    `),
+    prisma.$queryRaw<RawPathRow[]>(Prisma.sql`
+      SELECT "path"
+      FROM "event_logs"
+      WHERE "event" = 'page_view' AND "path" LIKE '/shelf?%q=%'
     `),
     prisma.$queryRaw<RawTermRow[]>(Prisma.sql`
       SELECT "term", COUNT(*) AS "count"
@@ -107,7 +113,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
       registeredUsers,
     },
     events: toEventCounts(eventRows),
-    topSearchTerms: toTermCounts(topSearchTerms),
+    topSearchTerms: mergeSearchTerms(toTermCounts(topSearchTerms), shelfSearchPaths),
     zeroResultSearchTerms: toTermCounts(zeroResultSearchTerms),
     topAskTerms: toTermCounts(topAskTerms),
     topDownloads: toDownloadItems(topDownloads),
@@ -136,6 +142,10 @@ interface RawCountRow {
 interface RawTermRow {
   readonly term?: string | null
   readonly count?: bigint | number | string | null
+}
+
+interface RawPathRow {
+  readonly path?: string | null
 }
 
 interface RawDownloadRow {
@@ -167,6 +177,40 @@ export function toEventCounts(
 
 function toTermCounts(rows: readonly RawTermRow[]): readonly SearchTermCount[] {
   return rows.map((row) => ({ term: readString(row.term), count: toNumber(row.count) }))
+}
+
+/**
+ * 检索事件优先。早期书架搜索只落在 page_view 的 /shelf?q= 上，没有 search 事件；
+ * 同一个词已经有 search 事件时，不再把这些页面浏览加进去，避免一次搜索算两次。
+ */
+function mergeSearchTerms(
+  fromEvents: readonly SearchTermCount[],
+  paths: readonly RawPathRow[],
+): readonly SearchTermCount[] {
+  const counts = new Map<string, number>()
+  for (const row of fromEvents) {
+    if (row.term === '') continue
+    counts.set(row.term, (counts.get(row.term) ?? 0) + row.count)
+  }
+  const covered = new Set(counts.keys())
+  for (const row of paths) {
+    const term = termFromShelfPath(readString(row.path))
+    if (term === '' || covered.has(term)) continue
+    counts.set(term, (counts.get(term) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([term, count]) => ({ term, count }))
+    .sort((left, right) => right.count - left.count || left.term.localeCompare(right.term, 'zh'))
+    .slice(0, STATS_TOP_LIMIT)
+}
+
+/** 从 /shelf?q=垃圾分类 取出检索词。只认书架自己的地址，登录回跳不算一次检索。 */
+function termFromShelfPath(path: string): string {
+  const queryIndex = path.indexOf('?')
+  if (!path.startsWith('/shelf') || queryIndex < 0) return ''
+  const term = new URLSearchParams(path.slice(queryIndex + 1)).get('q') ?? ''
+  const collapsed = term.trim().replace(/\s+/gu, ' ').toLowerCase()
+  return collapsed.length <= 100 ? collapsed : collapsed.slice(0, 100)
 }
 
 function toDownloadItems(rows: readonly RawDownloadRow[]): readonly DownloadTopItem[] {
