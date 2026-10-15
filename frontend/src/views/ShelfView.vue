@@ -69,25 +69,17 @@ const displayBooks = computed(() => {
   return sortBooks(source)
 })
 
-interface BookGroup {
-  readonly label: string
-  readonly rows: ShelfBook[][]
-}
+/** 当前这一页排成一架，不再按主题把同一页切开。主题用上面的筛选。 */
+const shelfRows = computed(() => chunkBooks(displayBooks.value))
 
-const bookGroups = computed((): readonly BookGroup[] => {
-  if (usingProxy.value) {
-    return [{ label: '', rows: chunkBooks(displayBooks.value) }]
-  }
-  const grouped = new Map<string, ShelfBook[]>()
-  for (const book of displayBooks.value) {
-    const label = book.topics[0] === undefined || book.topics[0] === '' ? '未标注' : book.topics[0]
-    const list = grouped.get(label) ?? []
-    list.push(book)
-    grouped.set(label, list)
-  }
-  return [...grouped.entries()]
-    .sort((left, right) => left[0].localeCompare(right[0], 'zh'))
-    .map(([label, books]) => ({ label, rows: chunkBooks(books) }))
+/** 主题是单选，和复现包一样。空字符串表示全部。 */
+const selectedTopic = computed({
+  get: () => filters.tag[0] ?? '',
+  set: (value: string | null | undefined) => {
+    const topic = value ?? ''
+    filters.tag = topic === '' ? [] : [topic]
+    onFilterChange()
+  },
 })
 
 function chunkBooks(books: readonly ShelfBook[]): ShelfBook[][] {
@@ -105,6 +97,15 @@ const yearChoices = computed(() => facetChoices(facets.years, (book) => book.yea
 const orgChoices = computed(() => facetChoices(facets.orgs, (book) => book.org))
 const typeChoices = computed(() => facetChoices(facets.types, (book) => book.docType))
 const tagChoices = computed(() => facetChoices(facets.tags, (book) => book.topics))
+
+const topicChoices = computed(() =>
+  [...tagChoices.value].sort((left, right) => {
+    const leftOther = left.value === '其他' ? 1 : 0
+    const rightOther = right.value === '其他' ? 1 : 0
+    if (leftOther !== rightOther) return leftOther - rightOther
+    return right.count - left.count || left.value.localeCompare(right.value, 'zh')
+  }),
+)
 
 function facetChoices(
   remote: readonly ShelfFacet[],
@@ -545,17 +546,13 @@ watch(
         <el-col :xs="24" :sm="12" :lg="6">
           <div class="facet-label">主题</div>
           <el-select
-            v-model="filters.tag"
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
+            v-model="selectedTopic"
             clearable
-            placeholder="不限"
+            placeholder="全部"
             class="facet-select"
-            @change="onFilterChange"
           >
             <el-option
-              v-for="facet in tagChoices"
+              v-for="facet in topicChoices"
               :key="facet.value"
               :label="`${displayOrMissing(facet.value)}（${facet.count}）`"
               :value="facet.value"
@@ -579,7 +576,10 @@ watch(
       <template #header>
         <div class="list-head">
           <span v-if="usingProxy">占位书架 {{ displayBooks.length }} 本</span>
-          <span v-else>共 {{ total }} 条，第 {{ page }} / {{ Math.max(totalPages, 1) }} 页</span>
+          <span v-else>
+            <template v-if="selectedTopic !== ''">{{ selectedTopic }} · </template>
+            共 {{ total }} 条，第 {{ page }} / {{ Math.max(totalPages, 1) }} 页
+          </span>
         </div>
       </template>
 
@@ -599,10 +599,8 @@ watch(
           <p v-if="usingProxy" class="proxy-note">
             这 {{ displayBooks.length }} 本是占位书，用来演示筛选和点开。正式 PDF 入库后会出现在同一位置，可以预览和下载原文。占位文字不能当作答案。
           </p>
-          <section v-for="group in bookGroups" :key="group.label || 'all'" class="tag-group">
-            <h3 v-if="group.label !== ''" class="tag-heading">{{ group.label }}</h3>
           <div class="bookcase">
-            <div v-for="(row, rowIndex) in group.rows" :key="rowIndex" class="shelf-row">
+            <div v-for="(row, rowIndex) in shelfRows" :key="rowIndex" class="shelf-row">
               <div class="books">
                 <button
                   v-for="book in row"
@@ -621,7 +619,6 @@ watch(
               <div class="plank"></div>
             </div>
           </div>
-          </section>
 
           <article v-if="openedBook" class="open-book">
             <div class="open-cover" :style="{ background: openedBook.spine }">
@@ -735,16 +732,6 @@ watch(
   color: var(--el-text-color-secondary);
   font-size: 13px;
   line-height: 1.6;
-}
-
-.tag-group + .tag-group {
-  margin-top: 18px;
-}
-
-.tag-heading {
-  margin: 0 0 8px;
-  font-size: 16px;
-  color: var(--zw-green);
 }
 
 .bookcase {
