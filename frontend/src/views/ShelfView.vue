@@ -682,10 +682,9 @@ watch(
 
 .filter-title {
   margin: 0;
-  padding-left: 10px;
-  border-left: 4px solid var(--zw-green);
-  color: var(--zw-ink);
-  font-size: 20px;
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 32px;
   font-weight: 700;
 }
 

@@ -52,7 +52,7 @@ const eventRows = computed(() =>
   })),
 )
 
-const GREEN = '#017c40'
+const GREEN = '#285c49'
 const INK = '#4d4d4d'
 
 const eventChart = computed(() =>
@@ -116,6 +116,19 @@ const downloadChart = computed(() =>
 const askTermHeight = computed(() => chartHeight(summary.value?.topAskTerms.length ?? 0))
 const searchHeight = computed(() => heatmapHeight(summary.value?.topSearchTerms.length ?? 0))
 const downloadHeight = computed(() => Math.max(120, (summary.value?.topDownloads.length ?? 0) * 56))
+
+const occupationRows = computed(() => summary.value?.profiles.byOccupation ?? [])
+const topicRows = computed(() => summary.value?.profiles.byTopic ?? [])
+const orgRows = computed(() => summary.value?.profiles.byOrg ?? [])
+const occupationChart = computed(() =>
+  rankedBar(occupationRows.value.map((row) => ({ name: row.label, value: row.count })), 140),
+)
+const topicChart = computed(() =>
+  rankedBar(topicRows.value.map((row) => ({ name: row.label, value: row.count })), 140),
+)
+const orgChart = computed(() =>
+  rankedBar(orgRows.value.map((row) => ({ name: row.label, value: row.count })), 160),
+)
 
 // ---------------------------------------------------------------- 取数
 
@@ -291,7 +304,7 @@ function searchHeatmap(
       itemHeight: 72,
       text: ['高', '低'],
       textStyle: { color: INK, fontSize: 12 },
-      inRange: { color: ['#e7f3ec', '#017c40'] },
+      inRange: { color: ['#efe6d4', '#285c49'] },
     },
     series: [
       {
@@ -572,6 +585,28 @@ onUnmounted(() => {
         </el-row>
 
         <el-card shadow="never" class="block">
+          <template #header><span class="block-title">用户构成</span></template>
+          <p class="metric-note visit-note">
+            按注册资料汇总，共 {{ summary.profiles.total }} 人。身份取职业，领域取关注议题。一人可以选多个议题，领域各组人数加起来可以大于注册人数。
+          </p>
+          <el-empty v-if="summary.profiles.total === 0" description="还没有注册用户" />
+          <el-row v-else :gutter="16">
+            <el-col :xs="24" :md="8">
+              <h3 class="sub-title">身份</h3>
+              <StatsChart :option="occupationChart" :height="chartHeight(occupationRows.length)" />
+            </el-col>
+            <el-col :xs="24" :md="8">
+              <h3 class="sub-title">领域</h3>
+              <StatsChart :option="topicChart" :height="chartHeight(topicRows.length)" />
+            </el-col>
+            <el-col :xs="24" :md="8">
+              <h3 class="sub-title">所属机构</h3>
+              <StatsChart :option="orgChart" :height="chartHeight(orgRows.length)" />
+            </el-col>
+          </el-row>
+        </el-card>
+
+        <el-card shadow="never" class="block">
           <template #header><span class="block-title">知识库索引</span></template>
           <div v-if="summary.library.index.available" class="kv-grid">
             <div><span>已审核文档</span><b>{{ summary.library.index.documentsApproved }} / {{ summary.library.index.documentsTotal }}</b></div>
@@ -732,7 +767,10 @@ onUnmounted(() => {
 
 .head-title {
   margin: 0;
-  font-size: 20px;
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 36px;
+  font-weight: 700;
 }
 
 .head-sub {
@@ -757,14 +795,23 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
+.sub-title {
+  margin: 0 0 4px;
+  color: #1c3328;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .block-row {
   align-items: stretch;
 }
 
 .metric-value {
-  font-size: 28px;
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 32px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .metric-label {

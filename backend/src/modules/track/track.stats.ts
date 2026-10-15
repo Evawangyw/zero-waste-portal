@@ -15,7 +15,9 @@ import type { PrismaClient } from '@prisma/client'
 import { loadCorpusIndexStatus, vectorCacheDir } from '../ask/ask.corpus.js'
 import { TRACK_EVENTS } from './track.types.js'
 import type {
+  AdminCountItem,
   AdminLibraryStats,
+  AdminUserProfileStats,
   AdminVisitorRow,
   AsksSummary,
   DownloadTopItem,
@@ -55,6 +57,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     activeTodayRows,
     recentVisitorRows,
     corpusIndex,
+    profileRows,
   ] = await Promise.all([
     prisma.eventLog.count(),
     prisma.eventLog.count({ where: { event: 'page_view' } }),
@@ -145,6 +148,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
       LIMIT ${STATS_TOP_LIMIT}
     `),
     loadCorpusIndexStatus(),
+    prisma.user.findMany({ select: { occupation: true, org: true, topics: true } }),
   ])
 
   const events = toEventCounts(eventRows)
@@ -181,6 +185,29 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     downloads: { logRows: downloadLogRows, events: downloadEvents },
     asks: toAsksSummary(asksTotal, asksNoAnswer, asksJudged),
     library,
+    profiles: summarizeUserProfiles(profileRows),
+  }
+}
+
+/** 把注册资料收成身份、领域、机构三组人数。空值单独成组，不丢用户。 */
+export function summarizeUserProfiles(
+  rows: readonly { readonly occupation: string; readonly org: string; readonly topics: string }[],
+): AdminUserProfileStats {
+  const occupations = new Map<string, number>()
+  const orgs = new Map<string, number>()
+  const topics = new Map<string, number>()
+  for (const row of rows) {
+    bump(occupations, filledLabel(row.occupation, '未填写'))
+    bump(orgs, filledLabel(row.org, '未填写'))
+    const selected = parseTopics(row.topics)
+    if (selected.length === 0) bump(topics, '未选择')
+    else for (const topic of selected) bump(topics, topic)
+  }
+  return {
+    total: rows.length,
+    byOccupation: toCounts(occupations),
+    byTopic: toCounts(topics),
+    byOrg: toCounts(orgs),
   }
 }
 
@@ -261,6 +288,32 @@ function toVisitorRow(row: RawVisitorRow, names: ReadonlyMap<string, string>): A
     firstSeenAt: toIso(row.firstSeen) ?? '',
     lastSeenAt: toIso(row.lastSeen) ?? '',
   }
+}
+
+function bump(counts: Map<string, number>, label: string): void {
+  counts.set(label, (counts.get(label) ?? 0) + 1)
+}
+
+function filledLabel(value: string, empty: string): string {
+  const text = value.trim()
+  return text === '' ? empty : text
+}
+
+function parseTopics(raw: string): readonly string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const labels = parsed.flatMap((item) => (typeof item === 'string' ? [item.trim()] : []))
+    return [...new Set(labels.filter((label) => label !== ''))]
+  } catch {
+    return []
+  }
+}
+
+function toCounts(counts: ReadonlyMap<string, number>): readonly AdminCountItem[] {
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label, 'zh'))
 }
 
 function vectorCacheTime(): string | null {

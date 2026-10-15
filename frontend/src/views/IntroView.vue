@@ -339,8 +339,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(900px 420px at 12% -10%, rgba(1, 124, 64, 0.45), transparent 60%),
-    #10241c;
+    radial-gradient(900px 420px at 12% -10%, rgba(211, 154, 66, 0.28), transparent 58%),
+    radial-gradient(720px 380px at 100% 110%, rgba(40, 92, 73, 0.45), transparent 55%),
+    #194436;
   color: #f3f7f4;
   outline: none;
 }
@@ -354,7 +355,7 @@ onBeforeUnmount(() => {
   display: block;
   height: 100%;
   width: calc((var(--step) + 1) / var(--total) * 100%);
-  background: #8fd6b0;
+  background: var(--ochre);
   transition: width 0.35s ease;
 }
 
@@ -397,10 +398,11 @@ onBeforeUnmount(() => {
 
 h1 {
   margin: 8px 0 12px;
-  font-size: clamp(28px, 4vw, 46px);
+  font-family: var(--serif);
+  font-size: clamp(36px, 5vw, 64px);
   font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
 }
 
 .lead {
@@ -484,7 +486,7 @@ h1 {
 .bar-fill {
   display: block;
   height: 100%;
-  background: #3cba78;
+  background: #e9bd6e;
   transform-origin: left center;
   animation: grow-x 0.7s ease both;
 }
@@ -530,7 +532,7 @@ h1 {
 .year-col {
   width: 100%;
   min-height: 3px;
-  background: #3cba78;
+  background: #e9bd6e;
   transform-origin: bottom center;
   animation: grow-y 0.65s ease both;
 }
@@ -571,7 +573,7 @@ h1 {
 }
 
 .btn-primary {
-  background: #017c40;
+  background: var(--forest);
   color: #fff;
 }
 

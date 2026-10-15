@@ -347,6 +347,20 @@ export interface StatsSummaryResponse {
   }
   /** 复现包管理后台顶部的规模统计，口径在后端 library 字段 */
   readonly library: AdminLibraryStats
+  /** 注册资料分布。身份是职业，领域是关注议题。 */
+  readonly profiles: AdminUserProfileStats
+}
+
+export interface AdminCountItem {
+  readonly label: string
+  readonly count: number
+}
+
+export interface AdminUserProfileStats {
+  readonly total: number
+  readonly byOccupation: readonly AdminCountItem[]
+  readonly byTopic: readonly AdminCountItem[]
+  readonly byOrg: readonly AdminCountItem[]
 }
 
 export interface ChunkDocumentItem {

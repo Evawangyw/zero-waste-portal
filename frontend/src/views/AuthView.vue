@@ -351,8 +351,10 @@ function errorFor(field: string): string {
 }
 
 .auth-title {
-  margin: 0 0 6px;
-  font-size: 22px;
+  margin: 0 0 8px;
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 32px;
 }
 
 .auth-sub {

@@ -79,7 +79,7 @@ watch(
 <style scoped>
 .app-shell {
   min-height: 100vh;
-  background: #fff;
+  background: var(--cream);
 }
 
 .app-main {
@@ -115,9 +115,10 @@ watch(
   --el-footer-padding: 0;
   --el-footer-height: auto;
   height: auto;
-  padding: 36px 16px 24px;
-  background: var(--zw-footer);
-  color: var(--zw-footer-text);
+  padding: 36px 28px 22px;
+  border-top: 1px solid var(--line);
+  background: #efeee5;
+  color: #6c746e;
   font-size: 13px;
   line-height: 1.7;
 }
@@ -136,14 +137,16 @@ watch(
 }
 
 .footer-name {
-  color: #fff;
+  color: var(--forest-deep);
+  font-family: var(--serif);
   font-size: 16px;
   font-weight: 700;
 }
 
 .footer-motto {
   margin-top: 8px;
-  color: #fff;
+  color: var(--forest-deep);
+  font-family: var(--serif);
   letter-spacing: 0.08em;
 }
 
@@ -155,21 +158,21 @@ watch(
 
 .footer-links a,
 .footer-inner a {
-  color: var(--zw-footer-text);
+  color: var(--forest);
   text-decoration: none;
 }
 
 .footer-links a:hover,
 .footer-inner a:hover {
-  color: #fff;
+  color: var(--forest-deep);
 }
 
 .footer-note {
   max-width: var(--zw-content);
   margin: 20px auto 0;
   padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  color: #a8a8a8;
+  border-top: 1px solid var(--line);
+  color: #8a8f89;
   font-size: 12px;
 }
 

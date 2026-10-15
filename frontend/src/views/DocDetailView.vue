@@ -365,7 +365,9 @@ function formatParseStatus(raw: string): string {
 
 .doc-title {
   margin: 0;
-  font-size: 24px;
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 28px;
   line-height: 1.4;
 }
 

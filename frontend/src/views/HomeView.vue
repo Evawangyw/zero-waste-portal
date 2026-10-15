@@ -13,6 +13,7 @@ import {
   streamAsk,
 } from '../api/ask'
 import type { AskSource } from '../api/ask'
+import AnswerMarkdown from '../components/AnswerMarkdown.vue'
 import { fetchShelfTotal } from '../api/docs'
 import { ApiError } from '../api/http'
 import type { ChatConversationSummary, ChatHistoryResponse, ChatMessage } from '../api/types'
@@ -273,35 +274,6 @@ function answerBody(content: string): string {
     .trimEnd()
 }
 
-interface AnswerPiece {
-  readonly kind: 'text' | 'cite'
-  readonly text: string
-  readonly index: number
-}
-
-function answerParagraphs(content: string): readonly string[] {
-  const body = answerBody(content).trim()
-  if (body === '') return []
-  return body.split(/\n{2,}/).map((part) => part.trim()).filter((part) => part !== '')
-}
-
-function answerPieces(paragraph: string): readonly AnswerPiece[] {
-  const pieces: AnswerPiece[] = []
-  const pattern = /\[\[(\d+)\]\]/g
-  let last = 0
-  for (const match of paragraph.matchAll(pattern)) {
-    const index = match.index ?? 0
-    if (index > last) pieces.push({ kind: 'text', text: paragraph.slice(last, index), index: 0 })
-    const cite = Number(match[1])
-    pieces.push({ kind: 'cite', text: match[1] ?? '', index: cite })
-    last = index + match[0].length
-  }
-  if (last < paragraph.length) {
-    pieces.push({ kind: 'text', text: paragraph.slice(last), index: 0 })
-  }
-  return pieces
-}
-
 function sourceByIndex(content: string, index: number): AskSource | undefined {
   return answerSources(content).find((source) => source.index === index)
 }
@@ -473,21 +445,11 @@ async function scrollToEnd(): Promise<void> {
                   <i /><i /><i />
                   <span>{{ line.thinking === '' ? '正在从原文里查找…' : line.thinking }}</span>
                 </div>
-                <div v-if="answerParagraphs(line.content).length > 0" class="answer-list">
-                  <p v-for="(paragraph, paragraphIndex) in answerParagraphs(line.content)" :key="paragraphIndex">
-                    <template v-for="(piece, pieceIndex) in answerPieces(paragraph)" :key="pieceIndex">
-                      <button
-                        v-if="piece.kind === 'cite'"
-                        type="button"
-                        class="inline-citation"
-                        @click="openSource(sourceByIndex(line.content, piece.index)?.docId ?? '')"
-                      >
-                        {{ piece.text }}
-                      </button>
-                      <template v-else>{{ piece.text }}</template>
-                    </template>
-                  </p>
-                </div>
+                <AnswerMarkdown
+                  v-if="answerBody(line.content).trim() !== ''"
+                  :body="answerBody(line.content)"
+                  @cite="openSource(sourceByIndex(line.content, $event)?.docId ?? '')"
+                />
                 <div v-if="answerSources(line.content).length > 0" class="sources">
                   <h3>参考来源</h3>
                   <button
@@ -536,13 +498,14 @@ async function scrollToEnd(): Promise<void> {
 
 <style scoped>
 .assistant {
-  --ask-green: #017c40;
-  --ask-deep: #014d28;
-  --ask-paper: #f4faf6;
-  --ask-sidebar: #e7f3ec;
-  --ask-ink: #1c3328;
-  --ask-muted: #5c6f64;
-  --ask-line: rgba(1, 124, 64, 0.16);
+  --ask-green: #285c49;
+  --ask-deep: #194436;
+  --ask-paper: #f7f5ee;
+  --ask-sidebar: #efeee5;
+  --ask-ink: #24302a;
+  --ask-muted: #6f7772;
+  --ask-line: rgba(41, 68, 56, 0.14);
+  --ask-rust: #be5b32;
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr);
   height: 100%;
@@ -564,7 +527,6 @@ async function scrollToEnd(): Promise<void> {
 .clear-chat,
 .history,
 .quick-grid button,
-.inline-citation,
 .citation,
 .composer button {
   font: inherit;
@@ -718,21 +680,21 @@ async function scrollToEnd(): Promise<void> {
   height: 66px;
   margin-bottom: 18px;
   border-radius: 22px 22px 22px 8px;
-  box-shadow: 0 14px 30px rgba(1, 124, 64, 0.22);
+  box-shadow: 0 14px 30px rgba(40, 92, 73, 0.23);
 }
 
-.kicker {
+.chat-welcome .kicker {
   margin: 0;
-  color: var(--ask-green);
+  color: var(--ask-rust);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.16em;
 }
 
 .chat-welcome h1 {
   margin: 10px 0;
   color: var(--ask-deep);
-  font-family: 'Songti SC', 'Noto Serif SC', 'STSong', serif;
+  font-family: var(--serif);
   font-size: 40px;
   font-weight: 700;
 }
@@ -758,7 +720,7 @@ async function scrollToEnd(): Promise<void> {
   padding: 18px 36px 18px 18px;
   border: 1px solid var(--ask-line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--paper);
   color: var(--ask-ink);
   line-height: 1.65;
   text-align: left;
@@ -766,16 +728,15 @@ async function scrollToEnd(): Promise<void> {
 }
 
 .quick-grid button:hover:not(:disabled) {
-  border-color: rgba(1, 124, 64, 0.4);
-  box-shadow: 0 12px 30px rgba(1, 92, 48, 0.08);
+  border-color: rgba(40, 92, 73, 0.35);
+  box-shadow: 0 12px 30px rgba(40, 60, 50, 0.09);
   transform: translateY(-3px);
 }
 
 .quick-grid button span {
   display: block;
   margin-bottom: 8px;
-  color: var(--ask-green);
-  font-size: 11px;
+  color: var(--ask-rust);
   font-weight: 800;
   letter-spacing: 0.12em;
 }
@@ -803,7 +764,7 @@ async function scrollToEnd(): Promise<void> {
   max-width: 72%;
   padding: 13px 16px;
   border-radius: 16px 4px 16px 16px;
-  background: #d7eadf;
+  background: #e5e8dd;
   font-size: 14px;
   line-height: 1.7;
 }
@@ -859,35 +820,11 @@ async function scrollToEnd(): Promise<void> {
   white-space: pre-wrap;
 }
 
-.answer-list p {
-  margin: 0 0 14px;
-  color: #3e5248;
-  font-size: 15px;
-  line-height: 1.9;
-}
-
-.inline-citation {
-  margin: 0 3px;
-  padding: 1px 6px;
-  border: 0;
-  border-radius: 5px;
-  background: rgba(1, 124, 64, 0.12);
-  color: var(--ask-deep);
-  font-size: 11px;
-  font-weight: 700;
-  vertical-align: 1px;
-}
-
-.inline-citation:hover {
-  background: var(--ask-green);
-  color: #fff;
-}
-
 .sources {
   margin-top: 8px;
   padding: 16px 16px 6px;
   border-radius: 13px;
-  background: #e7f3ec;
+  background: #efeee5;
 }
 
 .sources h3 {
@@ -960,10 +897,10 @@ async function scrollToEnd(): Promise<void> {
   display: flex;
   align-items: flex-end;
   padding: 8px 8px 8px 16px;
-  border: 1px solid rgba(1, 124, 64, 0.28);
+  border: 1px solid rgba(40, 92, 73, 0.22);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 16px 40px rgba(1, 77, 40, 0.12);
+  background: rgba(255, 253, 247, 0.95);
+  box-shadow: 0 15px 45px rgba(43, 59, 50, 0.14);
 }
 
 .composer textarea {

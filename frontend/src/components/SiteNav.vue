@@ -73,8 +73,12 @@ void authToken
 
 <style scoped>
 .site-nav {
-  background: #fff;
-  border-bottom: 1px solid var(--zw-line);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(246, 243, 234, 0.9);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(16px);
 }
 
 .nav-inner {
@@ -82,9 +86,9 @@ void authToken
   align-items: center;
   gap: 24px;
   width: 100%;
-  max-width: var(--zw-content);
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 14px 16px;
+  padding: 12px 28px;
   box-sizing: border-box;
 }
 
@@ -98,8 +102,8 @@ void authToken
 }
 
 .brand-mark {
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
   flex: none;
 }
@@ -118,33 +122,35 @@ void authToken
 }
 
 .brand-name {
-  color: var(--zw-ink);
-  font-size: 20px;
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: 0.04em;
   line-height: 1.2;
 }
 
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 6px;
   margin-left: auto;
 }
 
 .nav-links a {
-  color: var(--zw-ink);
-  font-size: 18px;
-  font-weight: 700;
+  color: #68716b;
+  font-size: 14px;
+  font-weight: 600;
   text-decoration: none;
-  padding: 6px 0 4px;
-  border-bottom: 2px solid transparent;
+  padding: 8px 16px;
+  border-radius: 999px;
   white-space: nowrap;
 }
 
 .nav-links a.active,
 .nav-links a:hover {
-  color: var(--zw-green);
-  border-bottom-color: var(--zw-green);
+  background: #e8e9dc;
+  color: var(--forest-deep);
 }
 
 .nav-right {
@@ -155,8 +161,15 @@ void authToken
 }
 
 .user-name {
-  color: var(--zw-muted);
-  font-size: 14px;
+  max-width: 160px;
+  overflow: hidden;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

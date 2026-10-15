@@ -164,6 +164,22 @@ export interface StatsSummaryResponse {
    * 访客按登录账号或匿名会话计：当前库没有 IP 访问表。
    */
   readonly library: AdminLibraryStats
+  /** 注册时留下的身份、领域和机构分布。不含姓名、手机号和密码。 */
+  readonly profiles: AdminUserProfileStats
+}
+
+/** 一个分组里有多少人。领域可以一人多选，所以各组人数加总可以大于注册人数。 */
+export interface AdminCountItem {
+  readonly label: string
+  readonly count: number
+}
+
+/** 注册资料汇总。身份取职业，领域取关注议题。 */
+export interface AdminUserProfileStats {
+  readonly total: number
+  readonly byOccupation: readonly AdminCountItem[]
+  readonly byTopic: readonly AdminCountItem[]
+  readonly byOrg: readonly AdminCountItem[]
 }
 
 /** 复现包「知识库管理」顶部统计，映射到现有书架、用户、下载和对话 */

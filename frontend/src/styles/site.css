@@ -1,60 +1,90 @@
 /*
- * 全站视觉：对齐安徽省六尺巷慈善基金会官网（h-col-112 及全站自定义样式）。
- * 主色 #017c40、导航字色 #333、模块标题条同主色、页脚 #2e3232、内容区白底、无大圆角。
+ * 全站视觉：对齐复现包的纸面风格。
+ * 米色底、深林绿、赭石点缀、衬线标题、圆角卡片。
  */
 
 :root {
-  --zw-green: #017c40;
-  --zw-green-dark: #016333;
-  --zw-ink: #333333;
-  --zw-muted: #4d4d4d;
-  --zw-line: #dedede;
-  --zw-footer: #2e3232;
-  --zw-footer-text: #d5d5d5;
-  --zw-page: #ffffff;
-  --zw-band: #f4faf6;
+  --forest: #285c49;
+  --forest-deep: #194436;
+  --cream: #f6f3ea;
+  --paper: #fffdf7;
+  --rust: #be5b32;
+  --ochre: #d39a42;
+  --ink: #24302a;
+  --muted: #6f7772;
+  --line: rgba(41, 68, 56, 0.14);
+  --shadow: 0 18px 50px rgba(49, 65, 55, 0.08);
+  --serif: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+
+  --zw-green: var(--forest);
+  --zw-green-dark: var(--forest-deep);
+  --zw-ink: var(--ink);
+  --zw-muted: var(--muted);
+  --zw-line: #e4e0d4;
+  --zw-footer: #efeee5;
+  --zw-footer-text: #6c746e;
+  --zw-page: var(--cream);
+  --zw-band: #efeee5;
   --zw-content: 1200px;
 
-  --el-color-primary: #017c40;
-  --el-color-primary-light-3: #4da379;
-  --el-color-primary-light-5: #80bea0;
-  --el-color-primary-light-7: #b3d8c6;
-  --el-color-primary-light-8: #cce5d9;
-  --el-color-primary-light-9: #e6f2ec;
-  --el-color-primary-dark-2: #016333;
-  --el-border-radius-base: 2px;
-  --el-border-radius-small: 2px;
-  --el-border-radius-round: 2px;
-  --el-font-family: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  --el-color-primary: #285c49;
+  --el-color-primary-light-3: #5d8a78;
+  --el-color-primary-light-5: #93aea4;
+  --el-color-primary-light-7: #c5d6ce;
+  --el-color-primary-light-8: #d7e4de;
+  --el-color-primary-light-9: #eaf3ef;
+  --el-color-primary-dark-2: #194436;
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+  --el-border-radius-round: 999px;
+  --el-font-family: 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --el-text-color-primary: var(--ink);
+  --el-bg-color: var(--paper);
+  --el-fill-color-blank: var(--paper);
 }
 
 html,
 body,
 #app {
   margin: 0;
-  background: var(--zw-page);
-  color: var(--zw-ink);
+  background: var(--cream);
+  color: var(--ink);
   font-family: var(--el-font-family);
 }
 
-/* 官网模块标题条：绿底、白字、直角 */
+h1,
+h2,
+.el-card__header {
+  font-family: var(--serif);
+}
+
 .el-card {
-  --el-card-border-color: var(--zw-line);
-  border-radius: 0;
-  border: 1px solid var(--zw-line);
+  --el-card-border-color: var(--line);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: 0 8px 28px rgba(45, 61, 52, 0.05);
 }
 
 .el-card__header {
-  background: var(--zw-green);
-  color: #fff;
-  border-bottom: none;
-  padding: 10px 16px;
+  background: transparent;
+  color: var(--forest-deep);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 20px;
   font-size: 18px;
   font-weight: 700;
   line-height: 1.4;
 }
 
-.el-card__header .el-button.is-plain,
-.el-card__header .el-tag {
-  --el-tag-bg-color: #fff;
+.el-button--primary {
+  --el-button-bg-color: var(--forest);
+  --el-button-border-color: var(--forest);
+  --el-button-hover-bg-color: var(--forest-deep);
+  --el-button-hover-border-color: var(--forest-deep);
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  background: #f8f7f1;
 }

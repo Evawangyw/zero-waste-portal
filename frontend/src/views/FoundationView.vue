@@ -154,23 +154,27 @@ function openExternal(url: string): void {
 
 .eyebrow {
   margin: 0 0 10px;
-  color: var(--zw-green);
-  font-size: 13px;
-  letter-spacing: 0.14em;
+  color: var(--rust);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
 }
 
 h1 {
   margin: 0 0 14px;
-  font-size: 32px;
-  line-height: 1.3;
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 36px;
+  line-height: 1.25;
 }
 
 .foundation > section > h2 {
   margin: 0 0 14px;
-  padding: 10px 16px;
-  background: var(--zw-green);
-  color: #fff;
-  font-size: 18px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--forest-deep);
+  font-family: var(--serif);
+  font-size: 28px;
   font-weight: 700;
 }
 
