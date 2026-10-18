@@ -4,7 +4,7 @@ import express from 'express'
 import type { Express } from 'express'
 import { askRouter } from './modules/ask/index.js'
 import { authRouter } from './modules/auth/index.js'
-import { docsRouter, fileRouter, shelfRouter, uploadRouter } from './modules/docs/index.js'
+import { docsRouter, fileRouter, listingRouter, shelfRouter, uploadRouter } from './modules/docs/index.js'
 import { embedRouter } from './modules/embed/index.js'
 import { healthRouter } from './modules/health/index.js'
 import { trackRouter } from './modules/track/index.js'
@@ -59,6 +59,8 @@ export function createApp(): Express {
 
   // 管理员单独上传一份资料到书架。只接受已登录的管理员。
   app.use(uploadRouter)
+  // 管理员上架 / 下架。下架后公众书架、打开和问答都不再使用这份资料。
+  app.use(listingRouter)
 
   // 全局 JSON 错误信封（QA-01 P1-3）：任何 /api/* 的请求体解析失败（畸形 JSON、
   // strict 模式非法原始值、超 1MB）都返回统一 JSON 信封，不再吐 Express 默认的

@@ -17,6 +17,7 @@ import { getAuthContext, requireAuth } from '../auth/index.js'
 import type { AuthLocals, AuthRequest } from '../auth/index.js'
 import { getPrisma } from '../../db/prisma.js'
 import { locateCorpusFile } from './docs.corpus.js'
+import { isDocListed } from './docs.listing.js'
 import { locateAdminUploadFile } from './docs.upload.js'
 import { buildContentDisposition, buildDownloadFileName } from './docs.file.name.js'
 import {
@@ -46,6 +47,7 @@ async function handleDetail(req: Request, res: Response): Promise<void> {
     respondError(res, 400, 'bad_request', '资料 ID 不合法')
     return
   }
+  if (await refuseUnlisted(id, res)) return
   try {
     const detail = await resolveDocDetail(id)
     if (detail === null) {
@@ -70,6 +72,7 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
     respondError(res, 400, 'bad_request', '资料 ID 不合法')
     return
   }
+  if (await refuseUnlisted(id, res)) return
 
   let detail: DocDetailResponse | null
   try {
@@ -158,6 +161,7 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
     respondError(res, 401, 'unauthorized', '请先登录后再下载')
     return
   }
+  if (await refuseUnlisted(id, res)) return
 
   let resolved: Awaited<ReturnType<typeof resolveDocForDownload>>
   try {
@@ -255,6 +259,30 @@ interface PipeBinaryOptions {
   /** 已知字节数；0/未知则不设 Content-Length（浏览器按 chunked 收） */
   readonly contentLength: number
   readonly extraHeaders?: Readonly<Record<string, string>> | undefined
+}
+
+/** 已下架的资料对公众按「没有这份」处理。管理员仍可打开和下载。 */
+async function refuseUnlisted(id: string, res: Response): Promise<boolean> {
+  try {
+    const listed = await isDocListed(id)
+    if (listed !== false) return false
+    if (await callerIsAdmin(res)) return false
+    respondError(res, 404, 'not_found', '资料不存在或尚未收录')
+    return true
+  } catch (err) {
+    respondInternal(res, '查询资料状态失败', err)
+    return true
+  }
+}
+
+async function callerIsAdmin(res: Response): Promise<boolean> {
+  const auth = getAuthContext(res as AuthResponse)
+  if (auth === null) return false
+  const user = await getPrisma().user.findUnique({
+    where: { id: auth.userId },
+    select: { isAdmin: true },
+  })
+  return user?.isAdmin === true
 }
 
 // ------------------------------------------------------------------ 工具

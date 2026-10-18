@@ -85,8 +85,8 @@ export async function queryFacets(
 ): Promise<ShelfFacetsResponse> {
   const kbClause =
     knowledgeBaseId === undefined
-      ? Prisma.sql``
-      : Prisma.sql`WHERE "knowledgeBaseId" = ${knowledgeBaseId}`
+      ? Prisma.sql`WHERE "listed" = 1`
+      : Prisma.sql`WHERE "listed" = 1 AND "knowledgeBaseId" = ${knowledgeBaseId}`
 
   const [typeRows, orgRows, yearRows, topicRows, counted] = await Promise.all([
     prisma.$queryRaw<RawFacetRow[]>(Prisma.sql`
@@ -127,7 +127,7 @@ export async function queryFacets(
  * 维度内多选 = 或，跨维度 = 与；'未标注' 哨兵映射为"该列 = ''"。
  */
 function buildWhere(query: ShelfQuery): Prisma.Sql {
-  const conditions: Prisma.Sql[] = []
+  const conditions: Prisma.Sql[] = [Prisma.sql`"listed" = 1`]
 
   if (query.knowledgeBaseId !== undefined) {
     conditions.push(Prisma.sql`"knowledgeBaseId" = ${query.knowledgeBaseId}`)

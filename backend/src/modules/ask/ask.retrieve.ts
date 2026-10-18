@@ -1,4 +1,5 @@
 // 词法召回和向量召回按名次融合，再交给抽取式回答。向量索引未完成时先只用词法。
+import { getPrisma } from '../../db/prisma.js'
 import type { ExtractHit } from './ask.extract.js'
 import { BM25Index } from './ask.bm25.js'
 import type { CorpusChunk } from './ask.corpus.js'
@@ -77,13 +78,20 @@ async function warmVectors(engine: Engine): Promise<void> {
 }
 
 async function search(engine: Engine, query: string): Promise<RetrieveResult> {
-  const lexical = engine.bm25.search(query, LEXICAL_K)
+  const unlisted = await loadUnlistedIds()
+  const listedChunk = (id: number): boolean => {
+    if (unlisted.size === 0) return true
+    const chunk = engine.byId.get(id)
+    return chunk !== undefined && !unlisted.has(String(chunk.documentId))
+  }
+  const lexical = engine.bm25.search(query, LEXICAL_K).filter((hit) => listedChunk(hit.id))
   const lexicalIds = new Set(lexical.map((hit) => hit.id))
   let vector: { id: number; score: number }[] = []
   if (engine.vectorReady && engine.vectors !== null) {
     const embedded = await embedTexts([queryText(query)])
     const row = embedded.data
     vector = searchVectors(engine.vectors, engine.vectorDim, engine.chunks.map((chunk) => chunk.chunkId), row, VECTOR_K)
+    vector = vector.filter((hit) => listedChunk(hit.id))
   }
   const vectorOnly = new Set(vector.map((hit) => hit.id).filter((id) => !lexicalIds.has(id)))
   const fused = fuseRanks([lexical.map((hit) => hit.id), vector.map((hit) => hit.id)], FUSED_K)
@@ -108,6 +116,15 @@ async function search(engine: Engine, query: string): Promise<RetrieveResult> {
     vectorDone: engine.vectorDone,
     vectorTotal: engine.vectorTotal,
   }
+}
+
+/** 已下架的资料编号。每次提问现查，下架立刻从回答里消失。 */
+async function loadUnlistedIds(): Promise<ReadonlySet<string>> {
+  const rows = await getPrisma().knowledgeIndex.findMany({
+    where: { listed: false },
+    select: { knowledgeId: true },
+  })
+  return new Set(rows.map((row) => row.knowledgeId))
 }
 
 function metaText(chunk: CorpusChunk): string {

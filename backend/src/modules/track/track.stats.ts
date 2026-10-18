@@ -122,7 +122,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
     prisma.user.count({ where: { isAdmin: true } }),
     prisma.chatMessage.count({ where: { role: 'user' } }),
     prisma.submission.count({ where: { status: 'pending' } }),
-    prisma.knowledgeIndex.count(),
+    prisma.knowledgeIndex.count({ where: { listed: true } }),
     prisma.$queryRaw<RawTimeRow[]>(Prisma.sql`
       SELECT MAX("syncedAt") AS "at" FROM "knowledge_index"
     `),

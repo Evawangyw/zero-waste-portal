@@ -7,6 +7,8 @@
 import { ApiError } from './http'
 import { request } from './http'
 import type {
+  AdminShelfResponse,
+  AdminShelfUpdateResponse,
   AdminUploadResult,
   ChunkDocumentsResponse,
   ChunkPageResponse,
@@ -39,6 +41,27 @@ export function fetchChunkPage(
   return request<ChunkPageResponse>('/admin/chunks', {
     token,
     query: { documentId, page, pageSize },
+  })
+}
+
+/** GET /api/admin/docs —— 管理员翻资料，决定上架还是下架 */
+export function fetchAdminShelf(
+  token: string,
+  query: { readonly q?: string; readonly listed?: '1' | '0' | 'all'; readonly page?: number },
+): Promise<AdminShelfResponse> {
+  return request<AdminShelfResponse>('/admin/docs', { token, query })
+}
+
+/** PATCH /api/admin/docs/:id/listed —— true 上架，false 下架 */
+export function setAdminDocListed(
+  token: string,
+  id: string,
+  listed: boolean,
+): Promise<AdminShelfUpdateResponse> {
+  return request<AdminShelfUpdateResponse>(`/admin/docs/${encodeURIComponent(id)}/listed`, {
+    method: 'PATCH',
+    token,
+    body: { listed },
   })
 }
 

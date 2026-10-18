@@ -6,9 +6,9 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { EChartsCoreOption } from 'echarts/core'
-import { fetchStatsSummary, uploadAdminDocument } from '../api/admin'
+import { fetchAdminShelf, fetchStatsSummary, setAdminDocListed, uploadAdminDocument } from '../api/admin'
 import { ApiError } from '../api/http'
-import type { StatsSummaryResponse } from '../api/types'
+import type { AdminShelfItem, StatsSummaryResponse } from '../api/types'
 import StatsChart from '../components/StatsChart.vue'
 import { ADMIN_STATS_REFRESH_MS, TRACK_EVENT_LABELS } from '../constants'
 import { authToken, currentUser, isLoggedIn, restoreAuth } from '../composables/useAuth'
@@ -150,6 +150,7 @@ async function loadSummary(): Promise<void> {
 /** 手动刷新按钮（自动刷新之外的第二条路，卡片要求二选一，这里两个都给） */
 function onManualRefresh(): void {
   void loadSummary()
+  void loadListing()
 }
 
 function openUploadPicker(): void {
@@ -402,6 +403,89 @@ function barOption(
   }
 }
 
+// ---------------------------------------------------------------- 上下架
+
+const LISTING_PAGE_SIZE = 10
+
+const listingItems = ref<AdminShelfItem[]>([])
+const listingTotal = ref(0)
+const listingPage = ref(1)
+const listingQuery = ref('')
+const listingFilter = ref<'1' | '0' | 'all'>('1')
+const listingLoading = ref(false)
+const listingError = ref('')
+const listingBusyId = ref('')
+let listingTimer: ReturnType<typeof setTimeout> | undefined
+
+function onListingInput(): void {
+  if (listingTimer !== undefined) clearTimeout(listingTimer)
+  listingTimer = setTimeout(() => {
+    listingTimer = undefined
+    listingPage.value = 1
+    void loadListing()
+  }, 300)
+}
+
+function setListingFilter(next: '1' | '0' | 'all'): void {
+  listingFilter.value = next
+  listingPage.value = 1
+  void loadListing()
+}
+
+function onListingPage(next: number): void {
+  listingPage.value = next
+  void loadListing()
+}
+
+async function loadListing(): Promise<void> {
+  const token = authToken()
+  if (token === null || !isAdmin.value) return
+  listingLoading.value = true
+  listingError.value = ''
+  try {
+    const page = await fetchAdminShelf(token, {
+      q: listingQuery.value.trim(),
+      listed: listingFilter.value,
+      page: listingPage.value,
+    })
+    listingItems.value = [...page.items]
+    listingTotal.value = page.total
+    listingPage.value = page.page
+  } catch (err) {
+    listingError.value = err instanceof ApiError ? err.message : '资料列表加载失败'
+  } finally {
+    listingLoading.value = false
+  }
+}
+
+async function toggleListed(row: AdminShelfItem): Promise<void> {
+  const token = authToken()
+  if (token === null || listingBusyId.value !== '') return
+  listingBusyId.value = row.id
+  const nextListed = !row.listed
+  try {
+    await setAdminDocListed(token, row.id, nextListed)
+    ElMessage.success(nextListed ? `《${row.title}》已上架` : `《${row.title}》已下架`)
+    if (summary.value !== null) {
+      const delta = nextListed ? 1 : -1
+      summary.value = {
+        ...summary.value,
+        library: { ...summary.value.library, documents: summary.value.library.documents + delta },
+      }
+    }
+    await loadListing()
+  } catch (err) {
+    ElMessage.error(err instanceof ApiError ? err.message : '操作失败')
+  } finally {
+    listingBusyId.value = ''
+  }
+}
+
+function listingMeta(row: AdminShelfItem): string {
+  const parts = [row.year, row.org, row.docType].filter((part) => part.trim() !== '')
+  return parts.length === 0 ? '未标注' : parts.join(' · ')
+}
+
 // ---------------------------------------------------------------- 启动 / 卸载
 
 /** 自动刷新定时器；组件卸载时必须清掉，否则离开页面还在打接口 */
@@ -415,6 +499,7 @@ onMounted(async () => {
   authUnverified.value = isLoggedIn.value && currentUser.value === null
   if (isAdmin.value) {
     await loadSummary()
+    await loadListing()
     timer = setInterval(() => {
       void loadSummary()
     }, ADMIN_STATS_REFRESH_MS)
@@ -426,6 +511,7 @@ onUnmounted(() => {
     clearInterval(timer)
     timer = null
   }
+  if (listingTimer !== undefined) clearTimeout(listingTimer)
 })
 </script>
 
@@ -527,6 +613,64 @@ onUnmounted(() => {
           <el-button type="primary" :loading="uploadBusy" @click="submitUpload">开始上传</el-button>
         </template>
       </el-dialog>
+
+      <el-card shadow="never" class="block">
+        <template #header><span class="block-title">资料上下架</span></template>
+        <p class="metric-note visit-note">
+          下架后，公众书架不再显示，也不能打开或下载。首页提问不会再引用它。文件还在，可以再上架。
+        </p>
+        <div class="listing-tools">
+          <el-input
+            v-model="listingQuery"
+            clearable
+            placeholder="搜标题、文件名或机构"
+            class="listing-search"
+            @input="onListingInput"
+          />
+          <el-button :type="listingFilter === '1' ? 'primary' : 'default'" @click="setListingFilter('1')">
+            已上架
+          </el-button>
+          <el-button :type="listingFilter === '0' ? 'primary' : 'default'" @click="setListingFilter('0')">
+            已下架
+          </el-button>
+          <el-button :type="listingFilter === 'all' ? 'primary' : 'default'" @click="setListingFilter('all')">
+            全部
+          </el-button>
+        </div>
+        <el-alert v-if="listingError !== ''" type="error" :closable="false" :title="listingError" />
+        <el-table v-loading="listingLoading" :data="listingItems" size="small" empty-text="没有符合的资料">
+          <el-table-column label="资料" min-width="240">
+            <template #default="{ row }">
+              <div class="listing-title">{{ row.title }}</div>
+              <div class="metric-note">{{ listingMeta(row) }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">{{ row.listed ? '已上架' : '已下架' }}</template>
+          </el-table-column>
+          <el-table-column label="" width="100">
+            <template #default="{ row }">
+              <el-button
+                size="small"
+                :type="row.listed ? 'warning' : 'primary'"
+                :loading="listingBusyId === row.id"
+                @click="toggleListed(row)"
+              >
+                {{ row.listed ? '下架' : '上架' }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="listingTotal > LISTING_PAGE_SIZE" class="listing-pager">
+          <el-pagination
+            layout="prev, pager, next, total"
+            :current-page="listingPage"
+            :page-size="LISTING_PAGE_SIZE"
+            :total="listingTotal"
+            @current-change="onListingPage"
+          />
+        </div>
+      </el-card>
 
       <el-alert
         v-if="loadError !== ''"
@@ -756,6 +900,28 @@ onUnmounted(() => {
 
 .upload-input {
   display: none;
+}
+
+.listing-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.listing-search {
+  width: 280px;
+  max-width: 100%;
+}
+
+.listing-title {
+  line-height: 1.4;
+}
+
+.listing-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .upload-file {

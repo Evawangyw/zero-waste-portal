@@ -393,6 +393,29 @@ export interface ChunkPageResponse {
   readonly items: readonly ChunkPageItem[]
 }
 
+/** GET /api/admin/docs 里的一条资料 */
+export interface AdminShelfItem {
+  readonly id: string
+  readonly title: string
+  readonly year: string
+  readonly org: string
+  readonly docType: string
+  readonly listed: boolean
+}
+
+export interface AdminShelfResponse {
+  readonly success: true
+  readonly items: readonly AdminShelfItem[]
+  readonly total: number
+  readonly page: number
+  readonly pageSize: number
+}
+
+export interface AdminShelfUpdateResponse {
+  readonly success: true
+  readonly doc: AdminShelfItem
+}
+
 /** POST /api/admin/uploads 成功后的资料 */
 export interface SomarkJobView {
   readonly documentId: string
