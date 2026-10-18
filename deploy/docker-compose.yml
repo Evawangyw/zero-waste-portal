@@ -17,11 +17,16 @@ services:
     environment:
       NODE_ENV: production
       PORT: '4000'
+      # 语料在宿主机 /root/corpus，原文 PDF 在 /root/pdfs
+      ASK_CORPUS_DB: /corpus/welfare-ai-deploy/server/data/app.db
+      ASK_PDF_ROOTS: /corpus:/pdfs
     ports:
       - '4000:4000'
     volumes:
       # SQLite 落在 backend/data/app.db（相对 prisma/schema.prisma 的 ../data）
       - ../backend/data:/app/backend/data
+      - /root/corpus:/corpus:ro
+      - /root/pdfs:/pdfs:ro
     healthcheck:
       test:
         [

@@ -9,6 +9,8 @@ FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY backend/package.json ./backend/package.json
 COPY frontend/package.json ./frontend/package.json
+# 云服务器没有 GPU。跳过 CUDA 附加库，否则安装脚本会去 NuGet 下载并因跳转失败。
+ENV ONNXRUNTIME_NODE_INSTALL=skip
 RUN npm config set registry https://registry.npmmirror.com \
  && npm install --workspace backend --include-workspace-root --include=dev
 
