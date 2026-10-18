@@ -68,6 +68,7 @@ export function parseShelfQuery(raw: unknown): ShelfQuery {
     knowledgeBaseId: readNonEmpty(single(q['knowledgeBaseId'])),
     types: readMulti(q['type']),
     orgs: readMulti(q['org']),
+    orgQuery: readNonEmpty(single(q['orgq'])) ?? null,
     years: readMulti(q['year']),
     tags: readTagFilter(q),
     q: readNonEmpty(single(q['q'])) ?? null,

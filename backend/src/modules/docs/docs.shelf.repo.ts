@@ -135,6 +135,7 @@ function buildWhere(query: ShelfQuery): Prisma.Sql {
 
   pushScalarFilter(conditions, 'docType', query.types)
   pushScalarFilter(conditions, 'org', query.orgs)
+  pushOrgQuery(conditions, query.orgQuery)
   pushScalarFilter(conditions, 'year', query.years)
 
   if (query.tags.length > 0) {
@@ -179,6 +180,17 @@ function pushScalarFilter(
   conditions.push(
     wantsMissing ? Prisma.sql`(${inClause} OR "${Prisma.raw(column)}" = '')` : inClause,
   )
+}
+
+/** 发布机构文本搜索：包含这段文字即命中。输入「未标注」时只看空机构。 */
+function pushOrgQuery(conditions: Prisma.Sql[], orgQuery: string | null): void {
+  if (orgQuery === null || orgQuery === '') return
+  if (orgQuery === MISSING_LABEL) {
+    conditions.push(Prisma.sql`"org" = ''`)
+    return
+  }
+  const pattern = `%${escapeLike(orgQuery)}%`
+  conditions.push(Prisma.sql`"org" LIKE ${pattern} ESCAPE '\\'`)
 }
 
 /** LIKE 转义：用户搜 "%" 不该变成通配符 */
@@ -274,6 +286,7 @@ function toAppliedFilters(query: ShelfQuery): ShelfAppliedFilters {
     year: [...query.years],
     tag: [...query.tags],
     q: query.q,
+    orgq: query.orgQuery,
   }
 }
 

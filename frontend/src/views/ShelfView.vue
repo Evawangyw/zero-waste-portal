@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 资料书架页（T05）：接 T03 的 /api/docs 与 /api/docs/facets。
-// 筛选（年份/机构/类型/主题，多选） + 排序 + 分页 + 文件名搜索。
+// 筛选（年份/类型多选，主题单选，发布机构文本搜索） + 排序 + 分页 + 文件名搜索。
 // 零结果时「试试问 AI」回到首页，用本机问答接着问。
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -21,12 +21,12 @@ const router = useRouter()
 
 interface Filters {
   type: string[]
-  org: string[]
   year: string[]
   tag: string[]
 }
 
-const filters = reactive<Filters>({ type: [], org: [], year: [], tag: [] })
+const filters = reactive<Filters>({ type: [], year: [], tag: [] })
+const orgKeyword = ref('')
 const keyword = ref(readQueryString('q'))
 const sort = ref<ShelfSort>(readSortFromQuery())
 const page = ref(1)
@@ -94,7 +94,6 @@ function chunkBooks(books: readonly ShelfBook[]): ShelfBook[][] {
 const openedBook = computed(() => displayBooks.value.find((book) => book.id === openedBookId.value) ?? null)
 
 const yearChoices = computed(() => facetChoices(facets.years, (book) => book.year))
-const orgChoices = computed(() => facetChoices(facets.orgs, (book) => book.org))
 const typeChoices = computed(() => facetChoices(facets.types, (book) => book.docType))
 const tagChoices = computed(() => facetChoices(facets.tags, (book) => book.topics))
 
@@ -138,7 +137,11 @@ let trackArrivalQuery = false
 
 /** 生效筛选（多选维度数量），用于筛选区折叠提示 */
 const activeFilterCount = computed(
-  () => filters.type.length + filters.org.length + filters.year.length + filters.tag.length,
+  () =>
+    filters.type.length +
+    filters.year.length +
+    filters.tag.length +
+    (orgKeyword.value.trim() === '' ? 0 : 1),
 )
 
 /** 零结果时给「试试问 AI」用的问题：搜索词优先，没有搜索词就用通用兜底句 */
@@ -152,7 +155,9 @@ const zeroResultQuestion = computed(() => {
 })
 
 function firstPickedLabel(): string | null {
-  for (const group of [filters.type, filters.org, filters.year, filters.tag]) {
+  const orgText = orgKeyword.value.trim()
+  if (orgText !== '') return orgText
+  for (const group of [filters.type, filters.year, filters.tag]) {
     const first = group[0]
     if (first !== undefined && first !== '') return first
   }
@@ -185,7 +190,7 @@ async function loadList(): Promise<void> {
   trackArrivalQuery = false
   const query: ShelfQueryInput = {
     type: filters.type,
-    org: filters.org,
+    orgq: orgKeyword.value.trim(),
     year: filters.year,
     tag: filters.tag,
     q: keyword.value.trim(),
@@ -206,7 +211,7 @@ async function loadList(): Promise<void> {
         zeroResult: response.zeroResult,
         filters: {
           type: [...filters.type],
-          org: [...filters.org],
+          org: orgKeyword.value.trim() === '' ? [] : [orgKeyword.value.trim()],
           year: [...filters.year],
           tag: [...filters.tag],
         },
@@ -231,7 +236,7 @@ function filterProxyBooks(): readonly ShelfBook[] {
   const text = keyword.value.trim().toLowerCase()
   return PROXY_BOOKS.filter((book) => {
     if (!matchesAny(filters.year, book.year)) return false
-    if (!matchesAny(filters.org, book.org)) return false
+    if (!matchesOrgKeyword(book.org)) return false
     if (!matchesAny(filters.type, book.docType)) return false
     if (filters.tag.length > 0 && !book.topics.some((topic) => filters.tag.includes(topic))) return false
     if (text === '') return true
@@ -242,6 +247,12 @@ function filterProxyBooks(): readonly ShelfBook[] {
 
 function matchesAny(selected: readonly string[], value: string): boolean {
   return selected.length === 0 || selected.includes(value)
+}
+
+function matchesOrgKeyword(org: string): boolean {
+  const text = orgKeyword.value.trim().toLowerCase()
+  if (text === '') return true
+  return org.toLowerCase().includes(text)
 }
 
 function proxyToShelfBook(book: ProxyBook): ShelfBook {
@@ -322,9 +333,19 @@ function onFilterChange(): void {
   void syncUrlAndReload()
 }
 
+let orgInputTimer: ReturnType<typeof setTimeout> | undefined
+
+function onOrgInput(): void {
+  if (orgInputTimer !== undefined) clearTimeout(orgInputTimer)
+  orgInputTimer = setTimeout(() => {
+    orgInputTimer = undefined
+    onFilterChange()
+  }, 300)
+}
+
 function clearFilters(): void {
   filters.type = []
-  filters.org = []
+  orgKeyword.value = ''
   filters.year = []
   filters.tag = []
   keyword.value = ''
@@ -361,7 +382,8 @@ async function syncUrlAndReload(): Promise<void> {
   if (text !== '') query['q'] = text
   if (sort.value !== 'year_desc') query['sort'] = sort.value
   for (const value of filters.type) appendMulti(query, 'type', value)
-  for (const value of filters.org) appendMulti(query, 'org', value)
+  const orgText = orgKeyword.value.trim()
+  if (orgText !== '') query['orgq'] = orgText
   for (const value of filters.year) appendMulti(query, 'year', value)
   for (const value of filters.tag) appendMulti(query, 'tag', value)
   await router.replace({ path: '/shelf', query })
@@ -403,7 +425,7 @@ function readFiltersFromQuery(key: string): string[] {
 
 function hydrateFromRoute(): void {
   filters.type = readFiltersFromQuery('type')
-  filters.org = readFiltersFromQuery('org')
+  orgKeyword.value = readQueryString('orgq')
   filters.year = readFiltersFromQuery('year')
   filters.tag = readFiltersFromQuery('tag')
   keyword.value = readQueryString('q')
@@ -423,6 +445,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', measureShelf)
+  if (orgInputTimer !== undefined) clearTimeout(orgInputTimer)
 })
 
 // 浏览器前进/后退时按 URL 回填（不重挂筛选控件，避免循环触发 onFilterChange）
@@ -431,7 +454,7 @@ watch(
   () => {
     const before = {
       type: filters.type.join(','),
-      org: filters.org.join(','),
+      orgq: orgKeyword.value.trim(),
       year: filters.year.join(','),
       tag: filters.tag.join(','),
       q: keyword.value.trim(),
@@ -441,7 +464,7 @@ watch(
     hydrateFromRoute()
     const after = {
       type: filters.type.join(','),
-      org: filters.org.join(','),
+      orgq: orgKeyword.value.trim(),
       year: filters.year.join(','),
       tag: filters.tag.join(','),
       q: keyword.value.trim(),
@@ -513,23 +536,13 @@ watch(
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
           <div class="facet-label">发布机构</div>
-          <el-select
-            v-model="filters.org"
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
+          <el-input
+            v-model="orgKeyword"
             clearable
-            placeholder="不限"
+            placeholder="输入机构名称"
             class="facet-select"
-            @change="onFilterChange"
-          >
-            <el-option
-              v-for="facet in orgChoices"
-              :key="facet.value"
-              :label="`${displayOrMissing(facet.value)}（${facet.count}）`"
-              :value="facet.value"
-            />
-          </el-select>
+            @input="onOrgInput"
+          />
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
           <div class="facet-label">知识类型</div>

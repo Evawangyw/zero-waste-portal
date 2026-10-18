@@ -12,6 +12,7 @@ import type {
 export interface ShelfQueryInput {
   readonly type?: readonly string[]
   readonly org?: readonly string[]
+  readonly orgq?: string
   readonly year?: readonly string[]
   readonly tag?: readonly string[]
   readonly q?: string
@@ -26,6 +27,7 @@ export function fetchShelf(query: ShelfQueryInput = {}): Promise<ShelfListRespon
     query: {
       type: joinMulti(query.type),
       org: joinMulti(query.org),
+      orgq: query.orgq,
       year: joinMulti(query.year),
       tag: joinMulti(query.tag),
       q: query.q,

@@ -134,6 +134,7 @@ export interface ShelfAppliedFilters {
   readonly year: readonly string[]
   readonly tag: readonly string[]
   readonly q: string | null
+  readonly orgq: string | null
 }
 
 export interface ShelfListResponse {

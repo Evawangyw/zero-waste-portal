@@ -75,6 +75,8 @@ export interface ShelfAppliedFilters {
   readonly year: readonly string[]
   readonly tag: readonly string[]
   readonly q: string | null
+  /** 发布机构模糊搜索词；null = 不搜 */
+  readonly orgq: string | null
 }
 
 /** 单个 facet（枚举值 + 该值下的条数） */
@@ -110,6 +112,8 @@ export interface ShelfQuery {
   readonly knowledgeBaseId?: string | undefined
   readonly types: readonly string[]
   readonly orgs: readonly string[]
+  /** 发布机构模糊搜索；null = 不搜。与 orgs 的精确多选可同时生效。 */
+  readonly orgQuery: string | null
   readonly years: readonly string[]
   readonly tags: readonly string[]
   /** 文件名/可读标题模糊搜索词；null = 不搜 */
