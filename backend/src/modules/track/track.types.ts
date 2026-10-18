@@ -164,7 +164,7 @@ export interface StatsSummaryResponse {
    * 访客按登录账号或匿名会话计：当前库没有 IP 访问表。
    */
   readonly library: AdminLibraryStats
-  /** 注册时留下的身份、领域和机构分布。不含姓名、手机号和密码。 */
+  /** 注册时留下的岗位、领域和机构分布。不含姓名、手机号和密码。 */
   readonly profiles: AdminUserProfileStats
 }
 
@@ -174,7 +174,7 @@ export interface AdminCountItem {
   readonly count: number
 }
 
-/** 注册资料汇总。身份取职业，领域取关注议题。 */
+/** 注册资料汇总。岗位是在所属机构担任的职务，领域取关注议题。 */
 export interface AdminUserProfileStats {
   readonly total: number
   readonly byOccupation: readonly AdminCountItem[]

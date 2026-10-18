@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 登录 / 注册页（T05）：调 T02 的 /api/auth/register 与 /api/auth/login。
-// 注册 = 五字段（姓名/机构/职业/关注议题/手机号）+ 密码 + 隐私勾选。
+// 注册 = 五字段（姓名/机构/岗位/关注议题/手机号）+ 密码 + 隐私勾选。
 // 支持 ?redirect=xxx 登录成功后回跳（详情页下载未登录时带过来）。
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -90,7 +90,7 @@ const registerRules: FormRules<RegisterFormModel> = {
     { max: 40, message: '姓名不超过 40 字', trigger: 'blur' },
   ],
   org: [{ required: true, message: '请输入所属机构', trigger: 'blur' }],
-  occupation: [{ required: true, message: '请输入职业', trigger: 'blur' }],
+  occupation: [{ required: true, message: '请输入岗位', trigger: 'blur' }],
   topics: [
     {
       validator: (_rule, value: unknown, callback: (error?: Error) => void) => {
@@ -281,8 +281,11 @@ function errorFor(field: string): string {
             <el-form-item label="所属机构" prop="org" :error="errorFor('org')">
               <el-input v-model="registerForm.org" placeholder="社区 / 基金会 / 公司…" />
             </el-form-item>
-            <el-form-item label="职业" prop="occupation" :error="errorFor('occupation')">
-              <el-input v-model="registerForm.occupation" placeholder="如：社区工作者" />
+            <el-form-item label="岗位" prop="occupation" :error="errorFor('occupation')">
+              <el-input
+                v-model="registerForm.occupation"
+                placeholder="在所属机构的岗位，如：项目专员"
+              />
             </el-form-item>
             <el-form-item label="关注议题" prop="topics" :error="errorFor('topics')">
               <el-select

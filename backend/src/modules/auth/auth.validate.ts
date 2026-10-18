@@ -35,9 +35,9 @@ export function parseRegisterBody(raw: unknown): ParseResult<RegisterBody> {
 
   const occupation = readTrimmedString(body['occupation'])
   if (occupation === null)
-    issues.push(issue('occupation', `职业必填（1-${MAX_OCCUPATION_LENGTH} 字）`))
+    issues.push(issue('occupation', `岗位必填（1-${MAX_OCCUPATION_LENGTH} 字）`))
   else if (occupation.length > MAX_OCCUPATION_LENGTH)
-    issues.push(issue('occupation', `职业不得超过 ${MAX_OCCUPATION_LENGTH} 字`))
+    issues.push(issue('occupation', `岗位不得超过 ${MAX_OCCUPATION_LENGTH} 字`))
 
   const topics = readTopics(body['topics'])
   if (topics === null)

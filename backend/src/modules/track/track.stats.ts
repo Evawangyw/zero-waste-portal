@@ -189,7 +189,7 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
   }
 }
 
-/** 把注册资料收成身份、领域、机构三组人数。空值单独成组，不丢用户。 */
+/** 把注册资料收成岗位、领域、机构三组人数。空值单独成组，不丢用户。 */
 export function summarizeUserProfiles(
   rows: readonly { readonly occupation: string; readonly org: string; readonly topics: string }[],
 ): AdminUserProfileStats {

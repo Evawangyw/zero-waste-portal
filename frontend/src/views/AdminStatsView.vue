@@ -587,12 +587,12 @@ onUnmounted(() => {
         <el-card shadow="never" class="block">
           <template #header><span class="block-title">用户构成</span></template>
           <p class="metric-note visit-note">
-            按注册资料汇总，共 {{ summary.profiles.total }} 人。身份取职业，领域取关注议题。一人可以选多个议题，领域各组人数加起来可以大于注册人数。
+            按注册资料汇总，共 {{ summary.profiles.total }} 人。岗位是在所属机构担任的职务，领域取关注议题。一人可以选多个议题，领域各组人数加起来可以大于注册人数。
           </p>
           <el-empty v-if="summary.profiles.total === 0" description="还没有注册用户" />
           <el-row v-else :gutter="16">
             <el-col :xs="24" :md="8">
-              <h3 class="sub-title">身份</h3>
+              <h3 class="sub-title">岗位</h3>
               <StatsChart :option="occupationChart" :height="chartHeight(occupationRows.length)" />
             </el-col>
             <el-col :xs="24" :md="8">
