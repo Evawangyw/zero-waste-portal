@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 资料书架页（T05）：接 T03 的 /api/docs 与 /api/docs/facets。
 // 筛选（年份/机构/类型/主题，多选） + 排序 + 分页 + 文件名搜索。
-// 零结果时**常驻**「试试问 AI」，点一下把搜索词预填进挂件（官方 openWithQuery）。
+// 零结果时「试试问 AI」回到首页，用本机问答接着问。
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -10,7 +10,7 @@ import type { ShelfQueryInput } from '../api/docs'
 import { ApiError } from '../api/http'
 import type { ShelfFacet, ShelfItem, ShelfSort } from '../api/types'
 import { MISSING_LABEL, SHELF_PAGE_SIZE, SHELF_SORT_OPTIONS } from '../constants'
-import { askWidget } from '../composables/useWidget'
+import { isLoggedIn } from '../composables/useAuth'
 import { trackSearch } from '../composables/useTracking'
 import { PROXY_BOOKS, type ProxyBook } from '../content/shelf-proxy'
 
@@ -337,13 +337,21 @@ function onPageChange(next: number): void {
   void syncUrlAndReload()
 }
 
-/** 零结果 -> 把当前条件预填进挂件并打开（官方 openWithQuery） */
+/** 零结果 -> 带上这句话去首页，由本机问答回答。未登录先去登录，回来再问。 */
 function askAiAboutZeroResult(): void {
   if (usingProxy.value) {
     ElMessage.info('库内还没有正式 PDF，这个问题没有依据，不能回答。')
     return
   }
-  askWidget(zeroResultQuestion.value)
+  const question = zeroResultQuestion.value
+  if (!isLoggedIn.value) {
+    void router.push({
+      path: '/auth',
+      query: { redirect: `/?q=${encodeURIComponent(question)}` },
+    })
+    return
+  }
+  void router.push({ path: '/', query: { q: question } })
 }
 
 /** 同步 URL（刷新/分享可复现），然后重新拉列表 */

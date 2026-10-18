@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 登录后的首页就是一轮一轮的对话。回答直接写在本页，并按账号保存历史。
 import { nextTick, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { SAMPLE_QUESTIONS } from '../constants'
 import {
@@ -26,6 +26,7 @@ interface TranscriptLine {
   thinking: string
 }
 
+const route = useRoute()
 const router = useRouter()
 const customQuestion = ref('')
 const libraryEmpty = ref(false)
@@ -39,11 +40,11 @@ const transcript = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   if (!isLoggedIn.value) return
-  startMemberHome()
+  void startMemberHome()
 })
 
 watch(isLoggedIn, (loggedIn) => {
-  if (loggedIn) startMemberHome()
+  if (loggedIn) void startMemberHome()
   else {
     messages.value = []
     conversations.value = []
@@ -51,9 +52,35 @@ watch(isLoggedIn, (loggedIn) => {
   }
 })
 
-function startMemberHome(): void {
-  void loadLibraryState()
-  void loadHistory()
+/** 历史加载完才接受地址栏里的问题，避免提问被随后的历史覆盖 */
+const homeReady = ref(false)
+
+watch(
+  () => (homeReady.value ? readRouteQuestion() : ''),
+  (question) => {
+    if (question === '') return
+    void askFromRoute()
+  },
+)
+
+async function startMemberHome(): Promise<void> {
+  await Promise.all([loadLibraryState(), loadHistory()])
+  homeReady.value = true
+}
+
+function readRouteQuestion(): string {
+  const raw = route.query['q']
+  const first = Array.isArray(raw) ? raw[0] : raw
+  return typeof first === 'string' ? first.trim() : ''
+}
+
+async function askFromRoute(): Promise<void> {
+  const question = readRouteQuestion()
+  if (question === '' || sending.value) return
+  const nextQuery = { ...route.query }
+  delete nextQuery['q']
+  await router.replace({ path: '/', query: nextQuery })
+  await submitQuestion(question)
 }
 
 async function loadLibraryState(): Promise<void> {

@@ -7,18 +7,15 @@
 // 实现要点：
 //  - 三条路由都挂在 docs 模块自己的 fileRouter 上（不动 auth/shelf 已验收代码）
 //  - 下载用 T02 导出的 requireAuth + getAuthContext 解 JWT，**只 import 不修改**
-//  - 预览/下载用 Readable.fromWeb(weknoraClient 的 stream).pipe(res) 流式透传，
-//    不把字节读进内存；客户端断开时 abort 上游
+//  - 预览/下载只读本机原文，不回源引擎；客户端断开时停掉文件流
 //  - 下载日志在**开流之前**写，保证「已授权的下载尝试」一定留痕（写日志失败不阻断下载）
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { createReadStream } from 'node:fs'
-import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { getAuthContext, requireAuth } from '../auth/index.js'
 import type { AuthLocals, AuthRequest } from '../auth/index.js'
 import { getPrisma } from '../../db/prisma.js'
-import { WeKnoraClient } from '../../weknora/index.js'
 import { locateCorpusFile } from './docs.corpus.js'
 import { locateAdminUploadFile } from './docs.upload.js'
 import { buildContentDisposition, buildDownloadFileName } from './docs.file.name.js'
@@ -116,7 +113,7 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
   }
 
   const located = await resolveLocalFile(id)
-  if (located?.kind === 'missing') {
+  if (located?.kind !== 'file') {
     const envelope: PreviewEnvelope = {
       success: true,
       preview: {
@@ -134,12 +131,8 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
     respondJson<PreviewEnvelope>(res, 200, envelope)
     return
   }
-  if (located?.kind === 'file') {
-    await pipeLocalFile(res, located.path, { ...previewOptions, contentLength: located.size })
-    return
-  }
 
-  await pipeBinary(res, (signal) => WeKnoraClient.fromEnv().previewStream(id, signal), previewOptions)
+  await pipeLocalFile(res, located.path, { ...previewOptions, contentLength: located.size })
 }
 
 // ------------------------------------------------------------------ 下载
@@ -186,7 +179,7 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
   )
 
   const located = await resolveLocalFile(id)
-  if (located?.kind === 'missing') {
+  if (located?.kind !== 'file') {
     respondError(res, 404, 'not_found', '本机没有这份原文')
     return
   }
@@ -204,17 +197,12 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
       'X-Download-Source': located?.kind === 'file' ? 'corpus' : resolved.source,
     },
   }
-  if (located?.kind === 'file') {
-    await pipeLocalFile(res, located.path, downloadOptions)
-    return
-  }
-
-  await pipeBinary(res, (signal) => WeKnoraClient.fromEnv().download(id, signal), downloadOptions)
+  await pipeLocalFile(res, located.path, downloadOptions)
 }
 
 // ------------------------------------------------------------------ 本机原文
 
-/** 管理员上传优先，其次是语料原文。null 表示仍走原来的引擎。 */
+/** 管理员上传优先，其次是语料原文。找不到就没有文件，不再去问引擎。 */
 async function resolveLocalFile(
   id: string,
 ): Promise<
@@ -258,7 +246,7 @@ async function pipeLocalFile(res: Response, filePath: string, options: PipeBinar
   }
 }
 
-// ------------------------------------------------------------------ 流式透传
+// ------------------------------------------------------------------ 本机文件头
 
 interface PipeBinaryOptions {
   readonly disposition: 'attachment' | 'inline'
@@ -267,65 +255,6 @@ interface PipeBinaryOptions {
   /** 已知字节数；0/未知则不设 Content-Length（浏览器按 chunked 收） */
   readonly contentLength: number
   readonly extraHeaders?: Readonly<Record<string, string>> | undefined
-}
-
-/**
- * 把 weknoraClient 的 ReadableStream 直接 pipe 给浏览器。
- * - 字节全程不落 Node 内存（20MB PDF 与 2GB PDF 走同一条代码路径）
- * - 客户端断开 -> abort 上游请求，WeKnora 立刻停止回源
- * - 上游在开流之前就报错（如 404）-> 转成本层 JSON 错误体，浏览器不会拿到半截文件
- */
-async function pipeBinary(
-  res: Response,
-  open: (signal: AbortSignal) => Promise<{
-    contentType: string
-    contentLength: number
-    stream: ReadableStream<Uint8Array> | null
-  }>,
-  options: PipeBinaryOptions,
-): Promise<void> {
-  const controller = new AbortController()
-  const onClientClose = (): void => {
-    controller.abort()
-  }
-  res.on('close', onClientClose)
-
-  try {
-    const binary = await open(controller.signal)
-    if (binary.stream === null) {
-      respondError(res, 502, 'upstream_unavailable', '资料源没有返回文件流，请稍后重试')
-      return
-    }
-
-    res.status(200)
-    res.setHeader('Content-Type', options.contentType)
-    res.setHeader(
-      'Content-Disposition',
-      buildContentDisposition(options.disposition, options.fileName),
-    )
-    res.setHeader('Cache-Control', 'private, no-store')
-    // X-Content-Type-Options: nosniff 阻止浏览器把 pdf 当 html 执行（引擎也在发，保持一致）
-    res.setHeader('X-Content-Type-Options', 'nosniff')
-    if (options.contentLength > 0) {
-      res.setHeader('Content-Length', String(options.contentLength))
-    }
-    for (const [key, value] of Object.entries(options.extraHeaders ?? {})) {
-      res.setHeader(key, value)
-    }
-
-    await pipeline(Readable.fromWeb(binary.stream), res)
-  } catch (err) {
-    // headers 已发出就不能改状态码了；此时只能断开连接（浏览器会看到传输失败）
-    if (res.headersSent) {
-      res.destroy(err instanceof Error ? err : new Error(String(err)))
-      return
-    }
-    const detail = err instanceof Error ? err.message : String(err)
-    console.error(`[docs.file] 文件流透传失败：${detail}`)
-    respondError(res, 502, 'upstream_unavailable', '资料源暂时不可用，请稍后重试')
-  } finally {
-    res.off('close', onClientClose)
-  }
 }
 
 // ------------------------------------------------------------------ 工具

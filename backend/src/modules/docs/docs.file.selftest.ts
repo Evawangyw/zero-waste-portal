@@ -345,8 +345,7 @@ async function testDetailResolve(): Promise<void> {
         const indexedYear = sample.year.trim() === '' ? META_MISSING : sample.year
         eq('年份与索引列一致', detail.metadata.year, indexedYear)
       } else {
-        check('upstreamAvailable=true（引擎可达）', detail.upstreamAvailable === true)
-        check('摘要非空（WeKnora description）', (detail.doc.summary ?? '') !== '')
+        check('非语料资料也不回源引擎', detail.upstreamAvailable === false)
         eq('年份取自 custom_metadata', detail.metadata.year, '2026')
       }
       check('download.fileName 形如 年份-机构-标题.ext', detail.download.fileName.includes('-'))

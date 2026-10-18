@@ -1,10 +1,8 @@
 <script setup lang="ts">
-// 应用外壳（T05）：导航条 + 路由出口 + 全局挂件初始化。
-// 挂件是**全站**常驻（首页/书架/详情都有"试试问 AI"入口），故在 App.vue 统一初始化一次。
+// 应用外壳：导航条 + 路由出口。问答在首页本机完成，不再加载右下角挂件。
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SiteNav from './components/SiteNav.vue'
-import { dismissWidget, flushPendingQuery, mountWidget } from './composables/useWidget'
 import { isLoggedIn, restoreAuth } from './composables/useAuth'
 import { APP_NAME } from './constants'
 
@@ -25,20 +23,6 @@ watch(isLoggedIn, (loggedIn) => {
   }
 })
 
-// AI 问答挂件只在登录后出现。登出立刻拆掉，避免未登录访客还能点右下角提问。
-watch(
-  [isLoggedIn, bare],
-  ([loggedIn, isBare]) => {
-    if (loggedIn && !isBare) {
-      void mountWidget().then(() => {
-        flushPendingQuery()
-      })
-      return
-    }
-    dismissWidget()
-  },
-  { immediate: true },
-)
 </script>
 
 <template>

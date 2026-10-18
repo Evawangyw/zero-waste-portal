@@ -1,16 +1,14 @@
 // 模块边界：docs（文件层 · 业务服务）
 // 契约（对外经 docs/index.ts 暴露）：
-//   resolveDocDetail(id) -> DocDetailResponse | null   （null = 索引与引擎都没有）
+//   resolveDocDetail(id) -> DocDetailResponse | null   （null = 索引里没有）
 //   decidePreview(...)   -> PreviewDecision            （纯函数，可单测）
 //   writeDownloadLog(prisma, userId, docId, fileName) -> DownloadLog 落库
 //
-// 索引优先：详情/预览/下载的元数据都先查本地 SQLite；索引未收录的新文件才回源 WeKnora。
-// 流式透传：预览/下载调用 weknoraClient 拿 ReadableStream，由 router 直接 pipe 到 res，
-//          本文件**不读字节**，20MB PDF 也不会进内存。
+// 详情只查本地 SQLite 和语料摘要。传入 client 时才会回源，线上路由不传。
+// 本文件不读文件字节。
 import { getPrisma } from '../../db/prisma.js'
 import type { PrismaClient } from '@prisma/client'
-import { WeKnoraClient } from '../../weknora/index.js'
-import type { WeKnoraKnowledge } from '../../weknora/index.js'
+import type { WeKnoraClient, WeKnoraKnowledge } from '../../weknora/index.js'
 import { buildDownloadFileName, parseFileMetadata, resolveExtension } from './docs.file.name.js'
 import { findIndexedDoc, type IndexedDocRow } from './docs.file.repo.js'
 import {
@@ -91,19 +89,23 @@ export function decidePreview(
 
 /**
  * 解析一条资料的详情（索引优先 + 回源补 description/profile）。
- * @returns 索引与引擎都查不到时返回 null（路由转 404）
+ * @returns 索引里没有时返回 null（路由转 404）。当前站点不回源引擎。
  */
 export async function resolveDocDetail(
   id: string,
   prisma: PrismaClient = getPrisma(),
-  client: WeKnoraClient = WeKnoraClient.fromEnv(),
+  client?: WeKnoraClient,
 ): Promise<DocDetailResponse | null> {
   const indexed = await findIndexedDoc(prisma, id)
 
-  // 语料编号（复现包 documents.id）的摘要在索引的「内容提要」里，不再回源 WeKnora。
+  // 语料编号（复现包 documents.id）的摘要在索引的「内容提要」里。
+  // 不传 client 时不回源；线上路由不传，避免打开资料就去连引擎。
   const localUpload = id.startsWith('upload-')
   const corpus = localUpload ? null : await findCorpusDoc(id)
-  const upstream = corpus === null && !localUpload ? await fetchKnowledgeSafely(client, id) : null
+  const upstream =
+    client !== undefined && corpus === null && !localUpload
+      ? await fetchKnowledgeSafely(client, id)
+      : null
 
   if (indexed === null && upstream === null) return null
 
@@ -137,18 +139,20 @@ export interface ResolvedDocForDownload {
 
 /**
  * 下载用解析：与详情同一套逻辑，但只保留拼文件名必需的字段。
- * 同样走「索引优先」，未命中才回源。
+ * 线上不传 client，只认本机索引。
  */
 export async function resolveDocForDownload(
   id: string,
   prisma: PrismaClient = getPrisma(),
-  client: WeKnoraClient = WeKnoraClient.fromEnv(),
+  client?: WeKnoraClient,
 ): Promise<ResolvedDocForDownload | null> {
   const indexed = await findIndexedDoc(prisma, id)
   const localUpload = id.startsWith('upload-')
   const corpus = localUpload ? null : await findCorpusDoc(id)
   const upstream =
-    indexed === null && corpus === null && !localUpload ? await fetchKnowledgeSafely(client, id) : null
+    client !== undefined && indexed === null && corpus === null && !localUpload
+      ? await fetchKnowledgeSafely(client, id)
+      : null
   if (indexed === null && upstream === null) return null
 
   const merged: {
