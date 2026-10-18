@@ -1,84 +1,126 @@
-# 零废弃知识库 · 公众端 monorepo
+# 零废弃知识库
 
-WeKnora v0.8.2 作内网问答引擎，本仓库是自建公众网站（前端 + 后端）。
+公众网站。未登录先看知识库介绍；登录后可以翻书架、打开资料，并在首页向知识库提问。
+
+首页问答在本机完成：词法检索和向量检索一起召回，再从原文抽出句子。回答按 Markdown 排版，句中编号可以点开来源。资料预览和下载读本机文件。
 
 - 前端：Vue 3 + Vite + TypeScript + Element Plus → `frontend/`
 - 后端：Node.js + Express（TypeScript strict）+ Prisma + SQLite → `backend/`
-- 部署：Docker Compose + Nginx（仅本项目两服务，**不含** WeKnora）→ `deploy/`
+- 部署：Docker Compose + Nginx → `deploy/`
 
-## 环境要求
+## 页面
 
-- Node.js >= 20（本机实测 v24.14.0）
-- npm >= 10（`pnpm` 可用亦可，脚本一一对应）
+| 路径 | 谁能看 | 做什么 |
+| --- | --- | --- |
+| `/intro` | 未登录 | 知识库介绍 |
+| `/` | 已登录 | 首页问答，侧栏保留历史 |
+| `/auth` | 所有人 | 登录 / 注册 |
+| `/shelf` | 所有人 | 资料书架。先选一个主题，发布机构可输入搜索，再按年份、类型整架翻页，每页 20 本 |
+| `/doc/:id` | 已登录 | 资料详情、预览、下载。未登录点开会去登录页 |
+| `/foundation` | 已登录 | 基金会介绍 |
+| `/admin/stats` | 管理员 | 库规模、访问，以及注册用户的岗位、领域和所属机构 |
 
-## 快速开始
+书架没有结果时，「试试问 AI」会带着这句话回到首页。
 
-```bash
-npm install                     # 根目录一次装齐（workspaces）
+## 后端模块
 
-npm run dev:backend             # 后端 http://localhost:4000
-npm run dev:frontend            # 前端 http://localhost:5173
-```
+`backend/src/modules/` 里每个目录一个模块，`index.ts` 是对外出口。
 
-验收：
-
-```bash
-curl http://localhost:4000/health     # => {"ok":true}
-curl http://localhost:5173            # => 前端 HTML（标题「零废弃知识库」）
-```
-
-## 配置
-
-两套库不要混用：
-
-- **WeKnora** 自己的库只给问答引擎用，本仓库不建、不改它。
-- **登录账号和本站业务数据** 放在自建后端的 SQLite：`backend/data/app.db`。
-
-首次在一台机器上跑后端时，先备好 `backend/.env`，再把登录库的表建出来。真实密钥只写进这个文件，不要写进文档。
-
-```bash
-cp deploy/.env.example backend/.env
-# 编辑 backend/.env：
-#   JWT_SECRET            换成随机长串（openssl rand -hex 32）
-#   DB_URL                保持示例里的 file:../data/app.db，即 backend/data/app.db
-#   WEKNORA_*             换成本机 WeKnora 的地址和密钥；没有密钥时登录仍可用，AI 问答不可用
-
-npm run prisma:generate
-npm run prisma:push --workspace backend
-```
-
-`backend/data/` 已在 `.gitignore` 里。换一台机器要重新执行上面的建库步骤；库是空的，需要在页面上重新注册账号。
-
-## 质量关
-
-```bash
-npm run lint            # ESLint（TS + Vue3），要求 0 error 0 warning
-npm run typecheck       # backend: tsc --noEmit / frontend: vue-tsc --noEmit
-npm run format:check    # Prettier 校验
-npm run verify          # 上面三条一起跑
-npm run prisma:generate # 生成 Prisma Client
-```
+| 模块 | 职责 |
+| --- | --- |
+| `health` | `GET /health` |
+| `auth` | 注册、登录、`/api/auth/me` |
+| `docs` | 书架、资料详情、预览、下载、管理员上传 |
+| `ask` | 本机检索与抽取式回答，以及对话历史 |
+| `track` | 行为埋点、管理统计 |
+| `ingest` | 按映射表把 Excel 元数据配上 PDF |
 
 ## 目录
 
 ```
 zero-waste-portal/
-├─ frontend/          # 公众端（占位页 → T02 起接真实路由）
-├─ backend/           # 自有后端（/health → T01 起接 WeKnora 对接层）
-│  └─ src/modules/    # 每个模块一个目录，index.ts 是唯一对外出口
-├─ deploy/            # docker-compose.yml / Dockerfile / nginx.conf / .env.example
-├─ docs/              # 任务卡与验收记录
-└─ AGENTS.md          # 执行方必读（三铁律）
+├─ frontend/src/
+│  ├─ views/          # 页面
+│  ├─ components/     # 导航、统计图、回答排版
+│  ├─ api/            # 调后端的类型和请求
+│  ├─ composables/    # 登录态、埋点
+│  └─ content/        # 介绍页和基金会文案
+├─ backend/src/
+│  ├─ app.ts          # 挂路由
+│  └─ modules/        # 见上表
+├─ backend/prisma/    # SQLite 表结构
+├─ backend/data/      # 账号、书架、对话、统计；不进 git
+├─ deploy/            # compose、Dockerfile、nginx、.env.example
+├─ demo/              # 不启动服务也能打开的静态演示
+├─ docs/              # 任务卡、验收记录、对外方案
+├─ scripts/data01/    # 一次性的书架数据整理脚本
+├─ inputs/            # 本机原始 PDF 与导入批次，不进 git
+└─ AGENTS.md          # 改代码前的约定
 ```
 
-## 密钥管理
+问答正文不在书架索引里。默认同读一份带切片的语料库，路径用 `ASK_CORPUS_DB` 指定。
 
-真实密钥**只**写进 `backend/.env`（已 gitignore），结构见 `deploy/.env.example`。
-任何 key / 密码 / token 不得进代码、进 git、进文档。
-`DB_URL` 只指向自建 SQLite，不指向 WeKnora 的数据库。
+## 环境要求
 
-## 当前进度
+- Node.js >= 20
+- npm >= 10
 
-| 任务卡 | 状态 |
+## 快速开始
+
+```bash
+npm install
+
+npm run dev:backend             # http://localhost:4000
+npm run dev:frontend            # http://localhost:5173
+```
+
+```bash
+curl http://localhost:4000/health
+curl http://localhost:5173
+```
+
+第一次在一台机器上跑，先备好 `backend/.env`，再把表建出来。真实密钥只写进这个文件。
+
+```bash
+cp deploy/.env.example backend/.env
+npm run prisma:generate
+npm run prisma:push --workspace backend
+```
+
+`.env` 里至少要换 `JWT_SECRET`。`DB_URL` 保持 `file:../data/app.db`。
+
+把语料同步进书架：
+
+```bash
+npm run sync:corpus --workspace backend
+```
+
+把某个已注册手机号提成管理员。不带手机号时，只列出当前管理员：
+
+```bash
+npm run admin:promote --workspace backend -- 13800000000
+```
+
+## 配置
+
+只记变量名，不记值。样例在 `deploy/.env.example`。
+
+| 变量 | 用途 |
 | --- | --- |
-| T00 工程脚手架 | ✅ 完成（见 `docs/验收记录/T00-验收记录.md`） |
+| `PORT` | 后端端口，默认 4000 |
+| `JWT_SECRET` | 登录令牌签名 |
+| `DB_URL` | 自建 SQLite，落到 `backend/data/app.db` |
+| `ASK_CORPUS_DB` | 问答用的语料库路径 |
+| `ADMIN_STATS_TOKEN` | 管理统计的静态口令；不设则只认管理员登录 |
+| `SOMARK_API_KEY` | 管理员上传后的转换任务。目前只登记，尚未调用接口 |
+
+## 质量关
+
+```bash
+npm run lint
+npm run typecheck
+npm run format:check
+npm run verify
+```
+
+后端自测在 `backend/package.json` 的 `test:*` 脚本里，按模块单独跑。
