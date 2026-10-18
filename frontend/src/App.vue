@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 应用外壳：导航条 + 路由出口。问答在首页本机完成，不再加载右下角挂件。
+// 应用外壳：导航条 + 路由出口。问答在 AI 助手页本机完成。
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SiteNav from './components/SiteNav.vue'
@@ -9,16 +9,16 @@ import { APP_NAME } from './constants'
 const route = useRoute()
 const router = useRouter()
 const bare = computed(() => route.meta['bare'] === true)
-const askPage = computed(() => route.name === 'home')
+const askPage = computed(() => route.name === 'ask')
 
 onMounted(() => {
   // 登录态恢复：有 token 才拉 /me，失败不打断页面
   void restoreAuth()
 })
 
-// 人已经在首页时退出，路由不会重新进入守卫，这里补一次，回到知识库介绍。
+// 人已经在关于页或 AI 助手页时退出，路由不会重新进入守卫，这里补一次，回到开场介绍。
 watch(isLoggedIn, (loggedIn) => {
-  if (!loggedIn && route.name === 'home') {
+  if (!loggedIn && (route.name === 'about' || route.name === 'ask')) {
     void router.replace({ name: 'intro' })
   }
 })
@@ -39,9 +39,9 @@ watch(isLoggedIn, (loggedIn) => {
           <p class="footer-motto">六尺归心、礼让自然</p>
         </div>
         <nav class="footer-links">
-          <router-link to="/">首页</router-link>
-          <router-link v-if="isLoggedIn" to="/foundation">基金会介绍</router-link>
+          <router-link to="/">关于零废弃知识库</router-link>
           <router-link to="/shelf">资料书架</router-link>
+          <router-link to="/ask">AI助手</router-link>
           <a href="https://www.lcx-foundation.org.cn/" target="_blank" rel="noopener noreferrer">
             基金会官网
           </a>

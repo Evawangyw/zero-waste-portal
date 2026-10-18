@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 登录后的首页就是一轮一轮的对话。回答直接写在本页，并按账号保存历史。
+// AI 助手：一轮一轮的对话。回答直接写在本页，并按账号保存历史。
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -79,7 +79,7 @@ async function askFromRoute(): Promise<void> {
   if (question === '' || sending.value) return
   const nextQuery = { ...route.query }
   delete nextQuery['q']
-  await router.replace({ path: '/', query: nextQuery })
+  await router.replace({ path: '/ask', query: nextQuery })
   await submitQuestion(question)
 }
 

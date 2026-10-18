@@ -1,6 +1,6 @@
 // 前端路由（T05）。公众页 + 兜底 404，全部懒加载之外的直接引入（本项目页面少，直接引入更利于排障）。
 //
-// 未登录打开首页会去知识库介绍。书架可以先翻。资料详情、下载和基金会介绍需要登录。
+// 登录后先到关于页。书架可以先翻。资料详情、下载和 AI 助手需要登录。
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { restoreAuth } from '../composables/useAuth'
@@ -15,12 +15,18 @@ import AdminStatsView from '../views/AdminStatsView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 
 const routes: readonly RouteRecordRaw[] = [
-  { path: '/', name: 'home', component: HomeView, meta: { title: '首页' } },
   {
-    path: '/foundation',
-    name: 'foundation',
+    path: '/',
+    name: 'about',
     component: FoundationView,
-    meta: { title: '基金会介绍', requiresAuth: true },
+    meta: { title: '关于零废弃知识库' },
+  },
+  { path: '/foundation', redirect: '/' },
+  {
+    path: '/ask',
+    name: 'ask',
+    component: HomeView,
+    meta: { title: 'AI助手', requiresAuth: true },
   },
   {
     path: '/shelf',
@@ -75,10 +81,10 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   const loggedIn = await restoreAuth()
 
-  // 知识库介绍只给未登录的人。已登录再打开 /intro，回到对话首页。
+  // 开场介绍只给未登录的人。登录后再打开，回到关于页。
   if (loggedIn && to.name === 'intro') return { path: '/' }
-  // 未登录的首页就是知识库介绍，不先看基金会。
-  if (!loggedIn && to.name === 'home') return { name: 'intro' }
+  // 未登录打开关于页，先看开场介绍。
+  if (!loggedIn && to.name === 'about') return { name: 'intro' }
 
   if (to.meta['requiresAuth'] !== true) return true
   if (loggedIn) return true

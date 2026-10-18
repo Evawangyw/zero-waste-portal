@@ -8,7 +8,7 @@ const router = useRouter()
 <template>
   <el-result icon="warning" title="页面不存在" sub-title="你访问的地址可能已失效或输错了">
     <template #extra>
-      <el-button type="primary" @click="router.push('/')">回首页</el-button>
+      <el-button type="primary" @click="router.push('/')">关于零废弃知识库</el-button>
       <el-button @click="router.push('/shelf')">去书架</el-button>
     </template>
   </el-result>

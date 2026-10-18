@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 基金会介绍：一段简介，跳到机构官网，并留下合作方式。
+// 关于零废弃知识库：放基金会简介，跳到机构官网，并留下合作方式。
 import {
   FOUNDATION_ADDRESS,
   FOUNDATION_EMAIL,
@@ -12,7 +12,7 @@ import {
 <template>
   <div class="foundation">
     <header class="hero">
-      <p class="eyebrow">基金会介绍</p>
+      <p class="eyebrow">关于零废弃知识库</p>
       <h1>安徽省六尺巷慈善基金会</h1>
       <p class="lead">{{ FOUNDATION_INTRO }}</p>
       <p class="motto">{{ FOUNDATION_MOTTO }}</p>

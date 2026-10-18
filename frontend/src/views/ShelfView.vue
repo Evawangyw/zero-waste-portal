@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 资料书架页（T05）：接 T03 的 /api/docs 与 /api/docs/facets。
 // 筛选（年份/类型多选，主题单选，发布机构文本搜索） + 排序 + 分页 + 文件名搜索。
-// 零结果时「试试问 AI」回到首页，用本机问答接着问。
+// 零结果时「试试问 AI」去 AI 助手，用本机问答接着问。
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -358,7 +358,7 @@ function onPageChange(next: number): void {
   void syncUrlAndReload()
 }
 
-/** 零结果 -> 带上这句话去首页，由本机问答回答。未登录先去登录，回来再问。 */
+/** 零结果 -> 带上这句话去 AI 助手，由本机问答回答。未登录先去登录，回来再问。 */
 function askAiAboutZeroResult(): void {
   if (usingProxy.value) {
     ElMessage.info('库内还没有正式 PDF，这个问题没有依据，不能回答。')
@@ -368,11 +368,11 @@ function askAiAboutZeroResult(): void {
   if (!isLoggedIn.value) {
     void router.push({
       path: '/auth',
-      query: { redirect: `/?q=${encodeURIComponent(question)}` },
+      query: { redirect: `/ask?q=${encodeURIComponent(question)}` },
     })
     return
   }
-  void router.push({ path: '/', query: { q: question } })
+  void router.push({ path: '/ask', query: { q: question } })
 }
 
 /** 同步 URL（刷新/分享可复现），然后重新拉列表 */

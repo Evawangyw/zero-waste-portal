@@ -257,7 +257,7 @@ function formatParseStatus(raw: string): string {
     <template v-else-if="detail !== null">
       <el-card shadow="never" class="head-card">
         <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
+          <el-breadcrumb-item :to="{ path: '/' }">关于零废弃知识库</el-breadcrumb-item>
           <el-breadcrumb-item :to="{ path: '/shelf' }">资料书架</el-breadcrumb-item>
           <el-breadcrumb-item>{{ detail.doc.readableTitle }}</el-breadcrumb-item>
         </el-breadcrumb>
