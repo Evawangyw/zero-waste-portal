@@ -50,14 +50,14 @@ export async function fetchShelfTotal(): Promise<number> {
   return response.total
 }
 
-/** GET /api/docs/:id —— 详情（元数据 + 摘要 + 预览/下载可用性） */
-export function fetchDocDetail(id: string): Promise<DocDetailResponse> {
-  return request<DocDetailResponse>(`/docs/${encodeURIComponent(id)}`)
+/** GET /api/docs/:id —— 详情（元数据 + 摘要 + 预览/下载可用性）。需要登录。 */
+export function fetchDocDetail(id: string, token: string): Promise<DocDetailResponse> {
+  return request<DocDetailResponse>(`/docs/${encodeURIComponent(id)}`, { token })
 }
 
-/** GET /api/docs/:id/preview —— 在线预览（可能回二进制，也可能回 PreviewEnvelope） */
-export function fetchDocPreview(id: string): Promise<Response> {
-  return request<Response>(`/docs/${encodeURIComponent(id)}/preview`, { raw: true })
+/** GET /api/docs/:id/preview —— 在线预览（可能回二进制，也可能回 PreviewEnvelope）。需要登录。 */
+export function fetchDocPreview(id: string, token: string): Promise<Response> {
+  return request<Response>(`/docs/${encodeURIComponent(id)}/preview`, { token, raw: true })
 }
 
 /** GET /api/docs/:id/download —— 下载（**必须带 JWT**，后端写下载日志） */

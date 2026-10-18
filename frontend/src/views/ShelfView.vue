@@ -650,7 +650,9 @@ watch(
               </template>
               <p v-for="(paragraph, index) in openedBook.pages" v-else :key="index">{{ paragraph }}</p>
               <router-link v-if="openedBook.detailTo" :to="openedBook.detailTo">
-                <el-button type="primary" size="small">打开资料详情</el-button>
+                <el-button type="primary" size="small">
+                  {{ isLoggedIn ? '打开资料详情' : '登录后查看和下载' }}
+                </el-button>
               </router-link>
               <el-button v-else size="small" @click="openedBookId = null">合上</el-button>
             </div>

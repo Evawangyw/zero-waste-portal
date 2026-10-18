@@ -1,7 +1,7 @@
 // 模块边界：docs（文件层 · 路由）
 // 契约：
-//   GET /api/docs/:id            -> 200 DocDetailResponse | 404 | 400
-//   GET /api/docs/:id/preview    -> 200 流 | 200 PreviewEnvelope(unsupported/tooLarge) | 404
+//   GET /api/docs/:id            -> 200 DocDetailResponse | 401 | 404 | 400  ← requireAuth
+//   GET /api/docs/:id/preview    -> 200 流 | 200 PreviewEnvelope(unsupported/tooLarge) | 401 | 404
 //   GET /api/docs/:id/download   -> 200 流(attachment, 重命名) | 401 | 404  ← requireAuth 保护
 //
 // 实现要点：
@@ -36,7 +36,7 @@ export const fileRouter: Router = Router()
 
 // ------------------------------------------------------------------ 详情
 
-fileRouter.get('/api/docs/:id', (req: Request, res: Response) => {
+fileRouter.get('/api/docs/:id', requireAuth, (req: Request, res: Response) => {
   void handleDetail(req, res)
 })
 
@@ -60,7 +60,7 @@ async function handleDetail(req: Request, res: Response): Promise<void> {
 
 // ------------------------------------------------------------------ 预览
 
-fileRouter.get('/api/docs/:id/preview', (req: Request, res: Response) => {
+fileRouter.get('/api/docs/:id/preview', requireAuth, (req: Request, res: Response) => {
   void handlePreview(req, res)
 })
 

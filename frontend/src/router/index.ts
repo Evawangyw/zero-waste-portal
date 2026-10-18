@@ -1,6 +1,6 @@
 // 前端路由（T05）。公众页 + 兜底 404，全部懒加载之外的直接引入（本项目页面少，直接引入更利于排障）。
 //
-// 未登录打开首页会去知识库介绍。书架、资料详情和基金会介绍需要登录。
+// 未登录打开首页会去知识库介绍。书架可以先翻。资料详情、下载和基金会介绍需要登录。
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { restoreAuth } from '../composables/useAuth'
@@ -26,7 +26,7 @@ const routes: readonly RouteRecordRaw[] = [
     path: '/shelf',
     name: 'shelf',
     component: ShelfView,
-    meta: { title: '资料书架', requiresAuth: true },
+    meta: { title: '资料书架' },
   },
   {
     path: '/doc/:id',

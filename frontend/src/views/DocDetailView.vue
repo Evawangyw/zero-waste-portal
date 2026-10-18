@@ -70,8 +70,13 @@ async function loadDetail(): Promise<void> {
   detail.value = null
   releasePreviewUrl()
   try {
-    detail.value = await fetchDocDetail(docId.value)
-    await loadPreview()
+    const token = authToken()
+    if (token === null) {
+      loadError.value = '查看资料需要先登录'
+      return
+    }
+    detail.value = await fetchDocDetail(docId.value, token)
+    await loadPreview(token)
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : '资料加载失败'
   } finally {
@@ -83,7 +88,16 @@ async function loadDetail(): Promise<void> {
  * 预览：能内联渲染（PDF/图片/文本）就直接开流，不能则读信封给出下载引导。
  * 无论自动预载还是用户点按钮，埋点都按 docId 去重（QA-01 P1-3）。
  */
-async function loadPreview(): Promise<void> {
+function reloadPreview(): void {
+  const token = authToken()
+  if (token === null) {
+    ElMessage.warning('查看资料需要先登录')
+    return
+  }
+  void loadPreview(token)
+}
+
+async function loadPreview(token: string): Promise<void> {
   if (detail.value === null) return
   if (!isPreviewable.value) {
     previewUnavailableReason.value =
@@ -92,7 +106,7 @@ async function loadPreview(): Promise<void> {
   }
   previewLoading.value = true
   try {
-    const response = await fetchDocPreview(docId.value)
+    const response = await fetchDocPreview(docId.value, token)
     const blob = await response.blob()
     previewUrl.value = URL.createObjectURL(blob)
     previewUnavailableReason.value = ''
@@ -286,7 +300,7 @@ function formatParseStatus(raw: string): string {
             type="primary"
             :disabled="!isPreviewable"
             :loading="previewLoading"
-            @click="loadPreview"
+            @click="reloadPreview"
           >
             在线预览
           </el-button>

@@ -231,10 +231,10 @@ function errorFor(field: string): string {
     <el-card shadow="never" class="auth-card">
       <h1 class="auth-title">登录 / 注册</h1>
       <p v-if="fromIntro" class="auth-sub">
-        零废弃 {{ ZERO_WASTE_TOTAL }} 条，化学品 {{ CHEMICAL_TOTAL }} 条。注册后可以翻书架，也可以向 AI
-        提问。
+        零废弃 {{ ZERO_WASTE_TOTAL }} 条，化学品 {{ CHEMICAL_TOTAL }} 条。书架可以先翻。注册后可以查看、下载资料，也可以向
+        AI 提问。
       </p>
-      <p v-else class="auth-sub">登录后可以查看资料书架，并向 AI 提问。</p>
+      <p v-else class="auth-sub">登录后可以查看和下载资料，并向 AI 提问。书架不用登录也能翻。</p>
 
       <el-tabs v-model="activeTab">
         <!-- ------------------------------------------------------ 登录 -->

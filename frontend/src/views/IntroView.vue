@@ -133,8 +133,12 @@ function goLogin(): void {
   void router.push(authLocation('login'))
 }
 
+function goShelf(): void {
+  void router.push('/shelf')
+}
+
 function skip(): void {
-  goLogin()
+  goShelf()
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -294,12 +298,13 @@ onBeforeUnmount(() => {
 
       <section v-else key="close" class="panel">
         <p class="kicker">然后</p>
-        <h1>登录后可以使用这些资料</h1>
+        <h1>可以先翻资料书架</h1>
         <p class="lead">
-          可以按议题翻书架，也可以向 AI 提问。回答只依据库内资料；库里没有的，会直接说没有。
+          书架按议题浏览，不用登录。打开资料、下载原文，以及向 AI 提问，需要登录。
         </p>
         <div class="close-actions">
-          <button type="button" class="btn btn-primary" @click="goRegister">
+          <button type="button" class="btn btn-primary" @click="goShelf">去翻书架</button>
+          <button type="button" class="btn btn-ghost" @click="goRegister">
             {{ isLoggedIn ? '进入知识库' : '去注册' }}
           </button>
           <button v-if="!isLoggedIn" type="button" class="btn btn-ghost" @click="goLogin">

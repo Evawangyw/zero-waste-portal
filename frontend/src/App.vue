@@ -41,7 +41,7 @@ watch(isLoggedIn, (loggedIn) => {
         <nav class="footer-links">
           <router-link to="/">首页</router-link>
           <router-link v-if="isLoggedIn" to="/foundation">基金会介绍</router-link>
-          <router-link v-if="isLoggedIn" to="/shelf">资料书架</router-link>
+          <router-link to="/shelf">资料书架</router-link>
           <a href="https://www.lcx-foundation.org.cn/" target="_blank" rel="noopener noreferrer">
             基金会官网
           </a>
