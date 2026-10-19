@@ -1,8 +1,9 @@
-// SoMark 转换接口。上传成功后必须经过这里，再进入问答切片。
-// 现在只登记任务、不访问 somark.cn。真正的解析以后替换 SomarkClient。
+// SoMark 转换接口。上传成功后调用接口，把 Markdown 写入语料库。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { createSomarkClient, readSomarkKeys } from './docs.somark.api.js'
+import { ingestSomarkMarkdown } from './docs.somark.ingest.js'
 import { uploadsRoot } from './docs.upload.js'
 
 /** 与复现包一致：同步小文件，超过这个体积改走异步任务 */
@@ -12,12 +13,17 @@ export const SOMARK_STATUSES = ['pending', 'running', 'done', 'failed'] as const
 
 export type SomarkStatus = (typeof SOMARK_STATUSES)[number]
 
-/** 交给转换器的一份已落盘原文 */
+/** 交给转换器的一份已落盘原文，附带书架上要保留的字段 */
 export interface SomarkConvertInput {
   readonly documentId: string
   readonly filePath: string
   readonly fileName: string
   readonly fileSize: number
+  readonly title: string
+  readonly year: string
+  readonly org: string
+  readonly docType: string
+  readonly topic: string
 }
 
 /** 转换器成功时交回的 Markdown。null 表示这次还没转换 */
@@ -66,22 +72,44 @@ export function createPendingSomarkJob(input: SomarkConvertInput, now: Date = ne
   }
 }
 
-/** 上传之后调用。当前客户端不转换，只把任务写成 somark.json */
+function clientFromEnv(): SomarkClient {
+  const keys = readSomarkKeys()
+  if (keys.length === 0) return pendingSomarkClient
+  return createSomarkClient(keys)
+}
+
+/** 上传之后调用。没有密钥时只登记；有密钥则转换并入库。 */
 export async function requestSomarkConversion(
   input: SomarkConvertInput,
-  client: SomarkClient = pendingSomarkClient,
+  client: SomarkClient = clientFromEnv(),
 ): Promise<SomarkJob> {
   const job = createPendingSomarkJob(input)
   writeSomarkJob(job)
-  const converted = await client.convert(input)
-  if (converted === null) return job
-  const done: SomarkJob = {
-    ...job,
-    status: 'done',
-    message: `已转换为 Markdown，共 ${converted.pages} 页`,
+  try {
+    const converted = await client.convert(input)
+    if (converted === null) return job
+    if (converted.markdown.trim().length < 20) {
+      const empty: SomarkJob = { ...job, status: 'failed', message: 'SoMark 没有转出可用的正文' }
+      writeSomarkJob(empty)
+      return empty
+    }
+    const stored = await ingestSomarkMarkdown(input, converted)
+    const done: SomarkJob = {
+      ...job,
+      status: 'done',
+      message: `已转换为 Markdown 并入库，共 ${converted.pages} 页、${stored.chunks} 段`,
+    }
+    writeSomarkJob(done)
+    return done
+  } catch (error) {
+    const failed: SomarkJob = {
+      ...job,
+      status: 'failed',
+      message: error instanceof Error && error.message !== '' ? error.message : 'SoMark 转换失败',
+    }
+    writeSomarkJob(failed)
+    return failed
   }
-  writeSomarkJob(done)
-  return done
 }
 
 export function readSomarkJob(documentId: string): SomarkJob | null {

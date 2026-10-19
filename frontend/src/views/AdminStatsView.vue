@@ -198,6 +198,7 @@ async function submitUpload(): Promise<void> {
     uploadFile.value = null
     ElMessage.success(`《${result.doc.title}》已上架。${result.somark.message}`)
     await loadSummary()
+    await loadListing()
   } catch (err) {
     uploadError.value = err instanceof ApiError ? err.message : '上传失败'
   } finally {
@@ -590,6 +591,7 @@ onUnmounted(() => {
 
       <el-dialog v-model="uploadOpen" title="上传资料" width="480px" :close-on-click-modal="!uploadBusy" :show-close="!uploadBusy" @close="closeUpload">
         <p class="upload-file">{{ uploadFile?.name }}</p>
+        <p class="metric-note">上传后用 SoMark 转成 Markdown，写入书架和问答。页数多时会多等一会儿。</p>
         <el-form label-position="top">
           <el-form-item label="标题">
             <el-input v-model="uploadTitle" maxlength="200" />
@@ -610,7 +612,9 @@ onUnmounted(() => {
         <el-alert v-if="uploadError !== ''" type="error" :closable="false" :title="uploadError" />
         <template #footer>
           <el-button :disabled="uploadBusy" @click="closeUpload">取消</el-button>
-          <el-button type="primary" :loading="uploadBusy" @click="submitUpload">开始上传</el-button>
+          <el-button type="primary" :loading="uploadBusy" @click="submitUpload">
+            {{ uploadBusy ? '正在转换并入库' : '开始上传' }}
+          </el-button>
         </template>
       </el-dialog>
 

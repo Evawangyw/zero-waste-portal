@@ -112,7 +112,7 @@ npm run admin:promote --workspace backend -- 13800000000
 | `DB_URL` | 自建 SQLite，落到 `backend/data/app.db` |
 | `ASK_CORPUS_DB` | 问答用的语料库路径 |
 | `ADMIN_STATS_TOKEN` | 管理统计的静态口令；不设则只认管理员登录 |
-| `SOMARK_API_KEY` | 管理员上传后的转换任务。目前只登记，尚未调用接口 |
+| `SOMARK_API_KEY` | 管理员上传后的 SoMark 转换。多把密钥用分号或逗号隔开，额度用完会换下一把 |
 
 ## 质量关
 

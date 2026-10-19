@@ -1,5 +1,5 @@
-// 管理员单独上传一份资料：文件落在 data/uploads，书架用 knowledgeBaseId=admin-upload。
-// 不写复现包语料库，所以不会进问答切片；预览和下载走本机文件。
+// 管理员单独上传一份资料：文件先落在 data/uploads。
+// SoMark 转换成功后，原文仍留在这里，Markdown 和切片写入语料库。
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, resolve, sep } from 'node:path'

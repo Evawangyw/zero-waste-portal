@@ -21,8 +21,8 @@ export interface RetrieveResult {
 }
 
 interface Engine {
-  readonly chunks: readonly CorpusChunk[]
-  readonly byId: ReadonlyMap<number, CorpusChunk>
+  chunks: CorpusChunk[]
+  byId: Map<number, CorpusChunk>
   readonly bm25: BM25Index
   vectors: Float32Array | null
   vectorDim: number
@@ -32,6 +32,18 @@ interface Engine {
 }
 
 let engineTask: Promise<Engine> | null = null
+
+/** 把刚入库的切片补进当前问答索引。进程还没加载语料时，下次提问会自己读到。 */
+export async function rememberIngestedChunks(added: readonly CorpusChunk[]): Promise<void> {
+  if (added.length === 0 || engineTask === null) return
+  const engine = await engineTask
+  for (const chunk of added) {
+    if (engine.byId.has(chunk.chunkId)) continue
+    engine.byId.set(chunk.chunkId, chunk)
+    engine.chunks.push(chunk)
+    engine.bm25.add(chunk.chunkId, chunk.content)
+  }
+}
 
 export function retrieve(query: string): Promise<RetrieveResult> {
   engineTask ??= openEngine()

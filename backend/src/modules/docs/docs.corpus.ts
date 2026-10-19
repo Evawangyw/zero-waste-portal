@@ -4,6 +4,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
 
 import { loadEnvFile } from '../../weknora/index.js'
+import { uploadsRoot } from './docs.upload.js'
 import {
   META_KEY_DOC_TYPE,
   META_KEY_DOMAIN,
@@ -41,6 +42,12 @@ export interface CorpusDoc {
 }
 
 let cached: Promise<readonly CorpusDoc[]> | null = null
+const pinnedDocs = new Map<string, CorpusDoc>()
+
+/** 刚入库、还没重新扫描原文目录的资料。重启后由文件名扫描接上。 */
+export function rememberCorpusDoc(doc: CorpusDoc): void {
+  pinnedDocs.set(doc.id, doc)
+}
 
 export function corpusDbPath(): string {
   loadEnvFile()
@@ -51,13 +58,14 @@ export function corpusDbPath(): string {
 function pdfRoots(): readonly string[] {
   loadEnvFile()
   const fromEnv = process.env['ASK_PDF_ROOTS']
-  if (fromEnv !== undefined && fromEnv.trim() !== '') {
-    return fromEnv
-      .split(':')
-      .map((part) => part.trim())
-      .filter((part) => part !== '')
-  }
-  return DEFAULT_PDF_ROOTS
+  const configured =
+    fromEnv !== undefined && fromEnv.trim() !== ''
+      ? fromEnv
+          .split(':')
+          .map((part) => part.trim())
+          .filter((part) => part !== '')
+      : [...DEFAULT_PDF_ROOTS]
+  return [...configured, uploadsRoot()]
 }
 
 /** 文件名（含扩展名）-> 绝对路径。同名只留先扫到的那份。 */
@@ -213,6 +221,8 @@ export function loadCorpusDocs(): Promise<readonly CorpusDoc[]> {
 }
 
 export async function findCorpusDoc(id: string): Promise<CorpusDoc | null> {
+  const pinned = pinnedDocs.get(id)
+  if (pinned !== undefined) return pinned
   const docs = await loadCorpusDocs()
   return docs.find((doc) => doc.id === id) ?? null
 }

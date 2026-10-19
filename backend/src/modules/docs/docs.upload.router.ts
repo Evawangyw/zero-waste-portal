@@ -48,7 +48,7 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
     const form = await readUploadForm(req)
     const stored = await storeAdminUpload(form)
     const located = await locateAdminUploadFile(stored.id)
-    const somark = await registerSomark(stored.id, stored.fileName, stored.fileSize, located)
+    const somark = await registerSomark(stored, form, located)
     res.status(201).json({ success: true, doc: stored, somark })
   } catch (err) {
     if (err instanceof UploadRejected) {
@@ -68,25 +68,29 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
 }
 
 async function registerSomark(
-  documentId: string,
-  fileName: string,
-  fileSize: number,
+  stored: { readonly id: string; readonly title: string; readonly fileName: string; readonly fileSize: number },
+  form: { readonly year: string; readonly org: string; readonly docType: string; readonly topic: string },
   located: Awaited<ReturnType<typeof locateAdminUploadFile>>,
 ): Promise<SomarkJob> {
   if (located === null || located.kind !== 'file') {
     return {
-      documentId,
+      documentId: stored.id,
       status: 'failed',
       message: '原文没有落盘，无法交给 SoMark',
       requestedAt: new Date().toISOString(),
-      fileName,
-      fileSize,
+      fileName: stored.fileName,
+      fileSize: stored.fileSize,
     }
   }
   return requestSomarkConversion({
-    documentId,
+    documentId: stored.id,
     filePath: located.path,
-    fileName,
+    fileName: stored.fileName,
     fileSize: located.size,
+    title: stored.title,
+    year: form.year,
+    org: form.org,
+    docType: form.docType,
+    topic: form.topic,
   })
 }
