@@ -678,8 +678,10 @@ async function scrollToEnd(): Promise<void> {
 
 .chat-main {
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
-  padding-bottom: 128px;
+  box-sizing: border-box;
+  padding-bottom: 168px;
 }
 
 .chat-welcome {
@@ -778,7 +780,7 @@ async function scrollToEnd(): Promise<void> {
 .conversation {
   max-width: 840px;
   margin: 0 auto;
-  padding: 42px 36px 20px;
+  padding: 42px 36px 12px;
 }
 
 .user-message {
