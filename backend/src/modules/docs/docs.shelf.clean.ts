@@ -30,8 +30,8 @@ const NOTICE_SHELL_RE =
 /** 公文壳：无书名号版本，如"关于加强垃圾分类工作的通知" / "关于XX的函" */
 const PLAIN_SHELL_RE = /^(?:关于)?(.{2,200}?)(?:的通知|的函|的公告|的意见|的批复)$/
 
-/** 主题分隔符：半角/全角逗号、顿号、分号、竖线、空白 */
-const TOPIC_SPLIT_RE = /[,，、;；|/\s]+/
+/** 知识领域分隔符：半角/全角逗号、顿号、分号、竖线、空白。斜杠留给「食物/有机废弃物」这种单一领域。 */
+const TOPIC_SPLIT_RE = /[,，、;；|\s]+/
 
 /**
  * 文件名清洗。
@@ -125,7 +125,7 @@ function parseTopics(value: unknown): readonly string[] {
   const out: string[] = []
   for (const part of parts) {
     const trimmed = part.trim()
-    if (trimmed === '' || seen.has(trimmed)) continue
+    if (trimmed === '' || trimmed === '/' || seen.has(trimmed)) continue
     seen.add(trimmed)
     out.push(trimmed)
   }

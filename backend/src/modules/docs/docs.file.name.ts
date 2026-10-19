@@ -20,8 +20,8 @@ export const FILE_META_KEY_DOC_TYPE = '知识类型'
 export const FILE_META_KEY_DOMAIN = '知识领域'
 export const FILE_META_KEY_ORG = '知识发布机构'
 
-/** 领域多值分隔符：半角/全角逗号、顿号、分号、竖线、斜杠、空白 */
-const TOPIC_SPLIT_RE = /[,，、;；|/\s]+/
+/** 领域多值分隔符：半角/全角逗号、顿号、分号、竖线、空白。斜杠是领域名的一部分。 */
+const TOPIC_SPLIT_RE = /[,，、;；|\s]+/
 
 /**
  * 解析 custom_metadata 为四维度（原始值，空 -> ''）。
@@ -87,7 +87,7 @@ function parseTopics(value: unknown): readonly string[] {
   const out: string[] = []
   for (const part of parts) {
     const trimmed = collapse(part)
-    if (trimmed === '' || seen.has(trimmed)) continue
+    if (trimmed === '' || trimmed === '/' || seen.has(trimmed)) continue
     seen.add(trimmed)
     out.push(trimmed)
   }

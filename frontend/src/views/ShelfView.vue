@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 资料书架页（T05）：接 T03 的 /api/docs 与 /api/docs/facets。
-// 筛选（年份/类型多选，主题单选，发布机构文本搜索） + 排序 + 分页 + 文件名搜索。
+// 筛选（年份/类型多选，知识领域单选，发布机构文本搜索） + 排序 + 分页 + 文件名搜索。
 // 零结果时「试试问 AI」去 AI 助手，用本机问答接着问。
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -69,10 +69,10 @@ const displayBooks = computed(() => {
   return sortBooks(source)
 })
 
-/** 当前这一页排成一架，不再按主题把同一页切开。主题用上面的筛选。 */
+/** 当前这一页排成一架，不再按知识领域把同一页切开。知识领域用上面的筛选。 */
 const shelfRows = computed(() => chunkBooks(displayBooks.value))
 
-/** 主题是单选，和复现包一样。空字符串表示全部。 */
+/** 知识领域是单选。空字符串表示全部。 */
 const selectedTopic = computed({
   get: () => filters.tag[0] ?? '',
   set: (value: string | null | undefined) => {
@@ -272,7 +272,7 @@ function toShelfBook(item: ShelfItem): ShelfBook {
     height: 156 + (Math.abs(hashText(item.id)) % 5) * 8,
     pages: [
       [item.org, item.year, item.docType].filter((part) => part !== '').join(' · '),
-      item.topics.length > 0 ? `标签：${item.topics.join('、')}` : '标签未标注',
+      item.topics.length > 0 ? `知识领域：${item.topics.join('、')}` : '知识领域未标注',
       '点击下方入口可打开这条资料的详情、预览和下载。',
     ].filter((line) => line !== ''),
     proxy: false,
@@ -565,7 +565,7 @@ watch(
           </el-select>
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
-          <div class="facet-label">主题</div>
+          <div class="facet-label">知识领域</div>
           <el-select
             v-model="selectedTopic"
             clearable

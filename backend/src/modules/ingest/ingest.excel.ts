@@ -8,10 +8,11 @@ import { MappingConfigError } from './ingest.mapping.js'
 import type { IngestMapping, IngestRow } from './ingest.types.js'
 
 /**
- * 多值分隔符：半角/全角逗号、顿号、分号、竖线、斜杠、空白/换行。
- * 与 docs.file.name.ts 的 TOPIC_SPLIT_RE 保持同一口径（书架侧拆出来的 topics 要和这里一致）。
+ * 多值分隔符：半角/全角逗号、顿号、分号、竖线、空白/换行。
+ * 斜杠不拆，表格里的「食物/有机废弃物」是一个领域。
+ * 与 docs.file.name.ts 的 TOPIC_SPLIT_RE 保持同一口径。
  */
-const MULTI_SPLIT_RE = /[,，、;；|/\s]+/
+const MULTI_SPLIT_RE = /[,，、;；|\s]+/
 
 /** 一行解析失败（收集起来，最后统一进报告，不中断整批） */
 export interface RowParseError {
@@ -151,7 +152,7 @@ export function splitMultiValue(cell: string): readonly string[] {
   const out: string[] = []
   for (const part of cell.split(MULTI_SPLIT_RE)) {
     const trimmed = collapse(part)
-    if (trimmed === '' || seen.has(trimmed)) continue
+    if (trimmed === '' || trimmed === '/' || seen.has(trimmed)) continue
     seen.add(trimmed)
     out.push(trimmed)
   }

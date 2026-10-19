@@ -603,7 +603,7 @@ onUnmounted(() => {
           <el-form-item label="知识类型">
             <el-input v-model="uploadType" maxlength="40" placeholder="例如 研究报告" />
           </el-form-item>
-          <el-form-item label="主题">
+          <el-form-item label="知识领域">
             <el-input v-model="uploadTopic" maxlength="40" />
           </el-form-item>
         </el-form>
