@@ -26,6 +26,7 @@
     "test:track": "tsx src/modules/track/track.selftest.ts",
     "test:ask-history": "tsx src/modules/ask/ask.history.selftest.ts",
     "test:ask-extract": "tsx src/modules/ask/ask.extract.selftest.ts",
+    "test:ask-generate": "tsx src/modules/ask/ask.generate.selftest.ts",
     "test:ask-retrieve": "tsx src/modules/ask/ask.retrieve.selftest.ts",
     "admin:promote": "tsx src/modules/track/track.admin.cli.ts"
   },

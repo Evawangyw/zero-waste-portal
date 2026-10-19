@@ -2,7 +2,8 @@
 // 契约：
 //   POST /api/ask {"query":"..."} -> 200 + text/event-stream
 //     检索在本机完成：BM25 与向量召回按名次融合，再按权威性、地域、核心概念重排
-//     正文是抽出来的原文句子，句尾 [[n]]，末尾 @@sources@@ 给前端做来源卡片
+//     抽出可引用原文后，才用百炼按这些原文生成回答；答不了则说明库内没有依据
+//     句尾 [[n]]，末尾 @@sources@@ 给前端做来源卡片
 //   GET  /api/chat/history?conversationId= -> 当前窗口的消息，以及这个用户自己的窗口列表
 //   POST /api/chat/history {question, answer, thinking, conversationId?} -> 写入当前窗口
 //   POST /api/chat/conversations -> 新开一个空窗口（当前窗口已经是空的则不重复创建）
@@ -13,6 +14,7 @@ import type { Request, Response } from 'express'
 import { getAuthContext, requireAuth } from '../auth/index.js'
 import type { AuthLocals, AuthRequest } from '../auth/index.js'
 import { composeExtractiveAnswer } from './ask.extract.js'
+import { collectGroundedAnswer, decideGrounding, streamBailianDeltas } from './ask.generate.js'
 import { retrieve } from './ask.retrieve.js'
 import {
   clearChatConversation,
@@ -72,6 +74,7 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   }
 
   const composed = composeExtractiveAnswer(body.query, retrieved.hits)
+  const decision = decideGrounding(composed)
 
   res.status(200)
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
@@ -98,14 +101,50 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   if (body.includeThinking === true) {
     writeSse(res, {
       type: 'thinking',
-      content: retrieved.vectorReady
-        ? `词法召回 ${retrieved.lexicalCount} 条，向量召回 ${retrieved.vectorCount} 条，融合后 ${retrieved.hits.length} 个片段，按原文抽取回答。`
-        : `向量索引还在构建，本次词法召回 ${retrieved.lexicalCount} 条，按原文抽取回答。`,
+      content: thinkingLine(retrieved, decision.action),
     })
   }
-  writeSse(res, { type: 'answer', content: composed.answer })
-  writeSse(res, { type: 'done', content: '' })
-  res.end()
+  if (decision.action === 'refuse') {
+    writeSse(res, { type: 'answer', content: decision.notice })
+    writeSse(res, { type: 'done', content: '' })
+    res.end()
+    return
+  }
+
+  const controller = new AbortController()
+  const onClose = (): void => {
+    if (!res.writableEnded) controller.abort()
+  }
+  res.on('close', onClose)
+  try {
+    const answer = await collectGroundedAnswer(
+      streamBailianDeltas(body.query, decision.evidence, controller.signal),
+      decision.sources,
+    )
+    writeSse(res, { type: 'answer', content: answer })
+  } catch (err) {
+    if (!controller.signal.aborted && !res.writableEnded) {
+      const message = err instanceof Error ? err.message : '生成回答失败'
+      console.error('[ask] 百炼生成失败', message)
+      writeSse(res, { type: 'error', content: '生成回答失败，请再试一次' })
+    }
+  } finally {
+    res.off('close', onClose)
+  }
+  if (!res.writableEnded) {
+    writeSse(res, { type: 'done', content: '' })
+    res.end()
+  }
+}
+
+function thinkingLine(
+  retrieved: { vectorReady: boolean; lexicalCount: number; vectorCount: number; hits: readonly unknown[] },
+  action: 'generate' | 'refuse',
+): string {
+  const counts = retrieved.vectorReady
+    ? `词法召回 ${retrieved.lexicalCount} 条，向量召回 ${retrieved.vectorCount} 条，融合后 ${retrieved.hits.length} 个片段。`
+    : `向量索引还在构建，本次词法召回 ${retrieved.lexicalCount} 条。`
+  return action === 'refuse' ? `${counts}没有可引用的原文，不调用模型。` : `${counts}只根据这些资料生成回答。`
 }
 
 /** 每条事件按 SSE 规范写成 `data: {json}\n\n`（curl -N 能实时看到） */

@@ -29,7 +29,7 @@ export interface ExtractiveAnswer {
   readonly sources: readonly ExtractiveSource[]
 }
 
-const EMPTY_NOTICE =
+export const EMPTY_NOTICE =
   '当前知识库中未检索到与该问题直接相关的可靠依据，建议更换关键词或在知识库中按主题浏览。'
 const WEAK_NOTICE =
   '检索到相关文档，但未能从中定位到可直接回答该问题的原文表述，建议尝试更具体的问法。'
@@ -228,20 +228,20 @@ export function composeExtractiveAnswer(
     lines.push(`${sentence.text} [[${index}]]`)
   }
 
+  const answer = `${lines.join('\n\n')}${formatSourceAppendix(sources)}`
+  return { answer, mode: 'extractive', sources }
+}
+
+/** 回答末尾的来源列表。前端靠 @@sources@@ 画卡片，生成式回答也接这一段。 */
+export function formatSourceAppendix(sources: readonly ExtractiveSource[]): string {
+  if (sources.length === 0) return ''
   const sourceLines = sources.map((source) => {
     const tail = [source.organization, source.year].filter((part) => part !== '').join('，')
     return tail === ''
       ? `[[${source.index}]] ${wrapTitle(source.title)}`
       : `[[${source.index}]] ${wrapTitle(source.title)}，${tail}`
   })
-  const answer = [
-    lines.join('\n\n'),
-    '',
-    '参考来源',
-    sourceLines.join('\n'),
-    `${EXTRACT_SOURCE_MARK}${JSON.stringify(sources)}`,
-  ].join('\n')
-  return { answer, mode: 'extractive', sources }
+  return `\n\n参考来源\n${sourceLines.join('\n')}\n${EXTRACT_SOURCE_MARK}${JSON.stringify(sources)}`
 }
 
 function emptyAnswer(notice: string): ExtractiveAnswer {
