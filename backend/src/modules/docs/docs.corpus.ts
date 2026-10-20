@@ -139,12 +139,23 @@ async function openSqlite(filePath: string): Promise<{
 
 export async function ensureDocumentsLibrary(dbFile: string): Promise<void> {
   const sqlite = await import('node:sqlite')
+  let hasLibrary = false
+  try {
+    const readOnly = new sqlite.DatabaseSync(dbFile, { readOnly: true })
+    try {
+      const columns = readOnly.prepare('PRAGMA table_info(documents)').all() as readonly { name?: string }[]
+      hasLibrary = columns.some((column) => column.name === 'library')
+    } finally {
+      readOnly.close()
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`打不开语料库 ${dbFile}：${message}`)
+  }
+  if (hasLibrary) return
   const db = new sqlite.DatabaseSync(dbFile)
   try {
-    const columns = db.prepare('PRAGMA table_info(documents)').all() as readonly { name?: string }[]
-    if (!columns.some((column) => column.name === 'library')) {
-      db.exec(`ALTER TABLE documents ADD COLUMN library TEXT NOT NULL DEFAULT ''`)
-    }
+    db.exec(`ALTER TABLE documents ADD COLUMN library TEXT NOT NULL DEFAULT ''`)
   } finally {
     db.close()
   }
