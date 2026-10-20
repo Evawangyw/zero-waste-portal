@@ -124,6 +124,7 @@ export interface ShelfItem {
   readonly org: string
   readonly docType: string
   readonly topics: readonly string[]
+  readonly library: string
   readonly updatedAt: string | null
   readonly syncedAt: string
 }
@@ -133,6 +134,7 @@ export interface ShelfAppliedFilters {
   readonly org: readonly string[]
   readonly year: readonly string[]
   readonly tag: readonly string[]
+  readonly library: string | null
   readonly q: string | null
   readonly orgq: string | null
 }
@@ -160,6 +162,7 @@ export interface ShelfFacetsResponse {
   readonly orgs: readonly ShelfFacet[]
   readonly years: readonly ShelfFacet[]
   readonly tags: readonly ShelfFacet[]
+  readonly libraries: readonly ShelfFacet[]
   readonly total: number
 }
 

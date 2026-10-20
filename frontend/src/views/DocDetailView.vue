@@ -17,6 +17,10 @@ const router = useRouter()
 const docId = computed(() => String(route.params['id'] ?? ''))
 
 const detail = ref<DocDetailResponse | null>(null)
+const libraryName = computed(() => {
+  const value = detail.value?.doc.customMetadata['资料库']
+  return typeof value === 'string' ? value.trim() : ''
+})
 const loading = ref(false)
 const loadError = ref('')
 
@@ -273,6 +277,7 @@ function formatParseStatus(raw: string): string {
           <el-tag effect="plain">类型：{{ displayOrMissing(detail.metadata.docType) }}</el-tag>
           <el-tag v-if="detail.metadataComplete" type="success" effect="plain">标注齐全</el-tag>
           <el-tag v-else type="info" effect="plain">部分维度未标注</el-tag>
+          <el-tag v-if="libraryName !== ''" size="small" effect="plain">{{ libraryName }}</el-tag>
           <el-tag v-for="topic in detail.metadata.topics" :key="topic" size="small" effect="plain">
             {{ topic }}
           </el-tag>

@@ -12,6 +12,7 @@ import type { CleanResult, ParsedMetadata } from './docs.shelf.types.js'
 export const META_KEY_YEAR = '年份'
 export const META_KEY_DOC_TYPE = '知识类型'
 export const META_KEY_DOMAIN = '知识领域'
+export const META_KEY_LIBRARY = '资料库'
 export const META_KEY_ORG = '知识发布机构'
 
 /** 结尾扩展名：.后跟 1~10 位字母数字（覆盖 xlsx/pdf/pptx/docx/md…），不含路径分隔符 */

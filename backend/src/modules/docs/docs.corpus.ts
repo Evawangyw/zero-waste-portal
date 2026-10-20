@@ -8,6 +8,7 @@ import { uploadsRoot } from './docs.upload.js'
 import {
   META_KEY_DOC_TYPE,
   META_KEY_DOMAIN,
+  META_KEY_LIBRARY,
   META_KEY_ORG,
   META_KEY_YEAR,
 } from './docs.shelf.clean.js'
@@ -36,6 +37,8 @@ export interface CorpusDoc {
   readonly org: string
   readonly docType: string
   readonly topics: readonly string[]
+  /** 知识领域第一层：零废弃或化学品。空串表示表格里没对上。 */
+  readonly library: string
   readonly summary: string
   /** 写入 knowledge_index.customMetadata 的四个书架字段，外加内容提要 */
   readonly customMetadata: Readonly<Record<string, string>>
@@ -134,12 +137,26 @@ async function openSqlite(filePath: string): Promise<{
   }
 }
 
+export async function ensureDocumentsLibrary(dbFile: string): Promise<void> {
+  const sqlite = await import('node:sqlite')
+  const db = new sqlite.DatabaseSync(dbFile)
+  try {
+    const columns = db.prepare('PRAGMA table_info(documents)').all() as readonly { name?: string }[]
+    if (!columns.some((column) => column.name === 'library')) {
+      db.exec(`ALTER TABLE documents ADD COLUMN library TEXT NOT NULL DEFAULT ''`)
+    }
+  } finally {
+    db.close()
+  }
+}
+
 async function readApprovedRows(dbFile: string): Promise<readonly Record<string, unknown>[]> {
+  await ensureDocumentsLibrary(dbFile)
   const db = await openSqlite(dbFile)
   try {
     return db
       .prepare(
-        `SELECT id, title, source_key, md_path, year, organization, doc_type, topic, summary
+        `SELECT id, title, source_key, md_path, year, organization, doc_type, topic, library, summary
          FROM documents
          WHERE status = 'approved'
          ORDER BY id`,
@@ -177,11 +194,13 @@ function toCorpusDoc(
   const docType = readText(row['doc_type']).trim()
   const topic = readText(row['topic']).trim()
   const topics = topic === '' ? [] : [topic]
+  const library = readText(row['library']).trim()
   const summary = readText(row['summary']).trim()
   const customMetadata: Record<string, string> = {}
   if (year !== '') customMetadata[META_KEY_YEAR] = year
   if (docType !== '') customMetadata[META_KEY_DOC_TYPE] = docType
   if (topic !== '') customMetadata[META_KEY_DOMAIN] = topic
+  if (library !== '') customMetadata[META_KEY_LIBRARY] = library
   if (org !== '') customMetadata[META_KEY_ORG] = org
   if (summary !== '') customMetadata[SUMMARY_KEY] = summary
   const title = readText(row['title']).trim() || fileName
@@ -196,6 +215,7 @@ function toCorpusDoc(
     org,
     docType,
     topics,
+    library,
     summary,
     customMetadata,
   }

@@ -65,6 +65,7 @@ function toUpsert(doc: CorpusDoc, syncedAt: Date) {
     org: meta.org,
     docType: meta.docType,
     topics: JSON.stringify(meta.topics),
+    library: doc.library,
     sourceUpdatedAt: null,
     syncedAt,
   }

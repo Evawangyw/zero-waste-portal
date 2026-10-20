@@ -27,8 +27,8 @@ shelfRouter.get('/api/docs', (req: Request, res: Response) => {
   void handleShelf(req, res)
 })
 
-shelfRouter.get('/api/docs/facets', (_req: Request, res: Response) => {
-  void handleFacets(res)
+shelfRouter.get('/api/docs/facets', (req: Request, res: Response) => {
+  void handleFacets(req, res)
 })
 
 async function handleShelf(req: Request, res: Response): Promise<void> {
@@ -41,10 +41,12 @@ async function handleShelf(req: Request, res: Response): Promise<void> {
   }
 }
 
-async function handleFacets(res: Response): Promise<void> {
+async function handleFacets(req: Request, res: Response): Promise<void> {
   try {
     // 书架已经是语料全文，不再按 WeKnora 知识库 ID 收窄，否则筛选项会对不上列表。
-    const result = await queryFacets(getPrisma(), undefined)
+    // lib 只收窄第二层分类，第一层计数仍是全库。
+    const query = parseShelfQuery(req.query)
+    const result = await queryFacets(getPrisma(), undefined, query.library)
     respondOk<ShelfFacetsResponse>(res, result)
   } catch (err) {
     respondError(res, '查询筛选项失败', err)
@@ -71,6 +73,7 @@ export function parseShelfQuery(raw: unknown): ShelfQuery {
     orgQuery: readNonEmpty(single(q['orgq'])) ?? null,
     years: readMulti(q['year']),
     tags: readTagFilter(q),
+    library: readNonEmpty(single(q['lib'])) ?? null,
     q: readNonEmpty(single(q['q'])) ?? null,
     page,
     pageSize,

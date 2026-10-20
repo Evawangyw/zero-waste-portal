@@ -26,6 +26,7 @@ export interface AdminUploadFields {
   readonly org: string
   readonly docType: string
   readonly topic: string
+  readonly library: string
 }
 
 export function fetchChunkDocuments(token: string): Promise<ChunkDocumentsResponse> {
@@ -78,6 +79,7 @@ export async function uploadAdminDocument(
   form.set('org', fields.org)
   form.set('docType', fields.docType)
   form.set('topic', fields.topic)
+  form.set('library', fields.library)
   const response = await fetch('/api/admin/uploads', {
     method: 'POST',
     headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },

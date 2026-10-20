@@ -15,6 +15,7 @@ export interface ShelfQueryInput {
   readonly orgq?: string
   readonly year?: readonly string[]
   readonly tag?: readonly string[]
+  readonly lib?: string
   readonly q?: string
   readonly page?: number
   readonly pageSize?: number
@@ -30,6 +31,7 @@ export function fetchShelf(query: ShelfQueryInput = {}): Promise<ShelfListRespon
       orgq: query.orgq,
       year: joinMulti(query.year),
       tag: joinMulti(query.tag),
+      lib: query.lib,
       q: query.q,
       page: query.page,
       pageSize: query.pageSize,
@@ -39,8 +41,8 @@ export function fetchShelf(query: ShelfQueryInput = {}): Promise<ShelfListRespon
 }
 
 /** GET /api/docs/facets —— 各维度枚举 + 计数 */
-export function fetchFacets(): Promise<ShelfFacetsResponse> {
-  return request<ShelfFacetsResponse>('/docs/facets')
+export function fetchFacets(lib?: string): Promise<ShelfFacetsResponse> {
+  return request<ShelfFacetsResponse>('/docs/facets', { query: { lib } })
 }
 
 /**

@@ -24,6 +24,7 @@ export interface SomarkConvertInput {
   readonly org: string
   readonly docType: string
   readonly topic: string
+  readonly library: string
 }
 
 /** 转换器成功时交回的 Markdown。null 表示这次还没转换 */

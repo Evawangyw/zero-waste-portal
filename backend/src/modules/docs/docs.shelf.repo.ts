@@ -44,6 +44,7 @@ export async function queryShelf(
   prisma: PrismaClient,
   query: ShelfQuery,
 ): Promise<ShelfListResponse> {
+  await ensureLibraryColumn(prisma)
   const where = buildWhere(query)
   const offset = (query.page - 1) * query.pageSize
 
@@ -51,7 +52,7 @@ export async function queryShelf(
     prisma.$queryRaw<RawShelfRow[]>(Prisma.sql`
       SELECT
         "knowledgeId", "title", "fileName", "readableTitle", "fileType", "fileSize",
-        "year", "org", "docType", "topics", "sourceUpdatedAt", "syncedAt"
+        "year", "org", "docType", "topics", "library", "sourceUpdatedAt", "syncedAt"
       FROM "knowledge_index"
       ${where}
       ${orderByClause(query.sort)}
@@ -82,13 +83,13 @@ export async function queryShelf(
 export async function queryFacets(
   prisma: PrismaClient,
   knowledgeBaseId: string | undefined,
+  library: string | null = null,
 ): Promise<ShelfFacetsResponse> {
-  const kbClause =
-    knowledgeBaseId === undefined
-      ? Prisma.sql`WHERE "listed" = 1`
-      : Prisma.sql`WHERE "listed" = 1 AND "knowledgeBaseId" = ${knowledgeBaseId}`
+  await ensureLibraryColumn(prisma)
+  const kbClause = listedWhere(knowledgeBaseId, null)
+  const tagClause = listedWhere(knowledgeBaseId, library)
 
-  const [typeRows, orgRows, yearRows, topicRows, counted] = await Promise.all([
+  const [typeRows, orgRows, yearRows, topicRows, libraryRows, counted] = await Promise.all([
     prisma.$queryRaw<RawFacetRow[]>(Prisma.sql`
       SELECT "docType" AS "value", COUNT(*) AS "count"
       FROM "knowledge_index" ${kbClause} GROUP BY "docType"
@@ -103,7 +104,11 @@ export async function queryFacets(
     `),
     // 主题是 JSON 数组串，SQLite 无法直接 GROUP BY 展开，取回内存里展开计数
     prisma.$queryRaw<RawTopicRow[]>(Prisma.sql`
-      SELECT "topics" AS "topics" FROM "knowledge_index" ${kbClause}
+      SELECT "topics" AS "topics" FROM "knowledge_index" ${tagClause}
+    `),
+    prisma.$queryRaw<RawFacetRow[]>(Prisma.sql`
+      SELECT "library" AS "value", COUNT(*) AS "count"
+      FROM "knowledge_index" ${kbClause} GROUP BY "library"
     `),
     prisma.$queryRaw<RawCountRow[]>(Prisma.sql`
       SELECT COUNT(*) AS "total" FROM "knowledge_index" ${kbClause}
@@ -116,8 +121,34 @@ export async function queryFacets(
     orgs: toFacets(orgRows),
     years: toFacets(yearRows, /* yearFirst= */ true),
     tags: toTagFacets(topicRows),
+    libraries: toFacets(libraryRows),
     total: toNumber(counted[0]?.['total']),
   }
+}
+
+function listedWhere(knowledgeBaseId: string | undefined, library: string | null): Prisma.Sql {
+  const parts: Prisma.Sql[] = [Prisma.sql`"listed" = 1`]
+  if (knowledgeBaseId !== undefined) {
+    parts.push(Prisma.sql`"knowledgeBaseId" = ${knowledgeBaseId}`)
+  }
+  if (library === MISSING_LABEL) parts.push(Prisma.sql`"library" = ''`)
+  else if (library !== null && library !== '') parts.push(Prisma.sql`"library" = ${library}`)
+  return Prisma.sql`WHERE ${Prisma.join(parts, ' AND ')}`
+}
+
+let libraryColumnReady = false
+
+async function ensureLibraryColumn(prisma: PrismaClient): Promise<void> {
+  if (libraryColumnReady) return
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "knowledge_index" ADD COLUMN "library" TEXT NOT NULL DEFAULT ''`,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (!message.includes('duplicate column')) throw error
+  }
+  libraryColumnReady = true
 }
 
 // ------------------------------------------------------------------ WHERE
@@ -137,6 +168,12 @@ function buildWhere(query: ShelfQuery): Prisma.Sql {
   pushScalarFilter(conditions, 'org', query.orgs)
   pushOrgQuery(conditions, query.orgQuery)
   pushScalarFilter(conditions, 'year', query.years)
+
+  if (query.library === MISSING_LABEL) {
+    conditions.push(Prisma.sql`"library" = ''`)
+  } else if (query.library !== null && query.library !== '') {
+    conditions.push(Prisma.sql`"library" = ${query.library}`)
+  }
 
   if (query.tags.length > 0) {
     const tagClauses = query.tags.map((tag) =>
@@ -241,6 +278,7 @@ interface RawShelfRow {
   readonly org: unknown
   readonly docType: unknown
   readonly topics: unknown
+  readonly library: unknown
   readonly sourceUpdatedAt: unknown
   readonly syncedAt: unknown
 }
@@ -274,6 +312,7 @@ function toShelfItem(row: RawShelfRow): ShelfItem {
     org: orMissing(readString(row.org)),
     docType: orMissing(readString(row.docType)),
     topics: parseTopicsCell(row.topics),
+    library: orMissing(readString(row.library)),
     updatedAt: readDate(row.sourceUpdatedAt),
     syncedAt: readDate(row.syncedAt) ?? '',
   }
@@ -285,6 +324,7 @@ function toAppliedFilters(query: ShelfQuery): ShelfAppliedFilters {
     org: [...query.orgs],
     year: [...query.years],
     tag: [...query.tags],
+    library: query.library,
     q: query.q,
     orgq: query.orgQuery,
   }

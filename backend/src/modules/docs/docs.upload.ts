@@ -11,6 +11,7 @@ import { getPrisma } from '../../db/prisma.js'
 import {
   META_KEY_DOC_TYPE,
   META_KEY_DOMAIN,
+  META_KEY_LIBRARY,
   META_KEY_ORG,
   META_KEY_YEAR,
 } from './docs.shelf.clean.js'
@@ -77,6 +78,7 @@ export async function readUploadForm(req: IncomingMessage): Promise<{
   readonly org: string
   readonly docType: string
   readonly topic: string
+  readonly library: string
 }> {
   const length = Number(req.headers['content-length'] ?? '')
   if (!Number.isFinite(length) || length <= 0) throw new UploadRejected(400, '缺少上传内容')
@@ -109,7 +111,12 @@ export async function readUploadForm(req: IncomingMessage): Promise<{
     org: clip(readField(form, 'org'), 80),
     docType: clip(readField(form, 'docType'), 40),
     topic: clip(readField(form, 'topic'), 40),
+    library: readLibrary(readField(form, 'library')),
   }
+}
+
+function readLibrary(value: string): string {
+  return value === '零废弃' || value === '化学品' ? value : ''
 }
 
 export async function storeAdminUpload(
@@ -121,6 +128,7 @@ export async function storeAdminUpload(
     readonly org: string
     readonly docType: string
     readonly topic: string
+    readonly library: string
   },
   prisma: PrismaClient = getPrisma(),
 ): Promise<StoredUpload> {
@@ -136,6 +144,7 @@ export async function storeAdminUpload(
   if (input.org !== '') custom[META_KEY_ORG] = input.org
   if (input.docType !== '') custom[META_KEY_DOC_TYPE] = input.docType
   if (input.topic !== '') custom[META_KEY_DOMAIN] = input.topic
+  if (input.library !== '') custom[META_KEY_LIBRARY] = input.library
   const topics = input.topic === '' ? [] : [input.topic]
 
   await prisma.knowledgeIndex.create({
@@ -153,6 +162,7 @@ export async function storeAdminUpload(
       org: input.org,
       docType: input.docType,
       topics: JSON.stringify(topics),
+      library: input.library,
       syncedAt: new Date(),
     },
   })

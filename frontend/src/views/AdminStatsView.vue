@@ -42,6 +42,7 @@ const uploadYear = ref('')
 const uploadOrg = ref('')
 const uploadType = ref('')
 const uploadTopic = ref('')
+const uploadLibrary = ref('')
 
 /** 事件分布表的行（key/label 来自 constants，值来自 summary.events，缺项补 0） */
 const eventRows = computed(() =>
@@ -170,6 +171,7 @@ function onUploadPicked(event: Event): void {
   uploadOrg.value = ''
   uploadType.value = ''
   uploadTopic.value = ''
+  uploadLibrary.value = ''
   uploadError.value = ''
   uploadOpen.value = true
 }
@@ -193,6 +195,7 @@ async function submitUpload(): Promise<void> {
       org: uploadOrg.value.trim(),
       docType: uploadType.value.trim(),
       topic: uploadTopic.value.trim(),
+      library: uploadLibrary.value,
     })
     uploadOpen.value = false
     uploadFile.value = null
@@ -606,7 +609,13 @@ onUnmounted(() => {
             <el-input v-model="uploadType" maxlength="40" placeholder="例如 研究报告" />
           </el-form-item>
           <el-form-item label="知识领域">
-            <el-input v-model="uploadTopic" maxlength="40" />
+            <el-select v-model="uploadLibrary" clearable placeholder="零废弃或化学品" style="width: 100%">
+              <el-option label="零废弃" value="零废弃" />
+              <el-option label="化学品" value="化学品" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="细分">
+            <el-input v-model="uploadTopic" maxlength="40" placeholder="例如 塑料、国际公约" />
           </el-form-item>
         </el-form>
         <el-alert v-if="uploadError !== ''" type="error" :closable="false" :title="uploadError" />

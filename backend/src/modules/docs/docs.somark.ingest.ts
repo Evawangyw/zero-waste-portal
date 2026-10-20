@@ -6,11 +6,12 @@ import { extname, join, resolve } from 'node:path'
 import { rememberIngestedChunks } from '../ask/ask.retrieve.js'
 import type { CorpusChunk } from '../ask/ask.corpus.js'
 import { getPrisma } from '../../db/prisma.js'
-import { corpusDbPath, rememberCorpusDoc, type CorpusDoc } from './docs.corpus.js'
+import { corpusDbPath, ensureDocumentsLibrary, rememberCorpusDoc, type CorpusDoc } from './docs.corpus.js'
 import { CORPUS_KNOWLEDGE_BASE_ID } from './docs.corpus.sync.js'
 import {
   META_KEY_DOC_TYPE,
   META_KEY_DOMAIN,
+  META_KEY_LIBRARY,
   META_KEY_ORG,
   META_KEY_YEAR,
 } from './docs.shelf.clean.js'
@@ -33,6 +34,7 @@ export async function ingestSomarkMarkdown(
   writeFileSync(join(mdDir, mdName), converted.markdown)
 
   const topic = input.topic === '' ? '其他' : input.topic
+  const library = input.library === '零废弃' || input.library === '化学品' ? input.library : ''
   const year = /^\d{4}$/u.test(input.year) ? Number(input.year) : null
   const saved = await insertCorpus(dbFile, {
     title: input.title,
@@ -40,6 +42,7 @@ export async function ingestSomarkMarkdown(
     year,
     docType: input.docType,
     topic,
+    library,
     mdPath: `storage/markdown/${mdName}`,
     markdown: converted.markdown,
     sourceKey: input.fileName,
@@ -51,6 +54,7 @@ export async function ingestSomarkMarkdown(
   if (input.org !== '') custom[META_KEY_ORG] = input.org
   if (input.docType !== '') custom[META_KEY_DOC_TYPE] = input.docType
   if (topic !== '') custom[META_KEY_DOMAIN] = topic
+  if (library !== '') custom[META_KEY_LIBRARY] = library
   const doc: CorpusDoc = {
     id: shelfId,
     title: input.title,
@@ -62,6 +66,7 @@ export async function ingestSomarkMarkdown(
     org: input.org,
     docType: input.docType,
     topics: [topic],
+    library,
     summary: '',
     customMetadata: custom,
   }
@@ -82,6 +87,7 @@ export async function ingestSomarkMarkdown(
     org: input.org,
     docType: input.docType,
     topics: JSON.stringify([topic]),
+    library,
     sourceUpdatedAt: null,
     syncedAt: new Date(),
   }
@@ -101,6 +107,7 @@ interface CorpusInsert {
   readonly year: number | null
   readonly docType: string
   readonly topic: string
+  readonly library: string
   readonly mdPath: string
   readonly markdown: string
   readonly sourceKey: string
@@ -111,13 +118,14 @@ async function insertCorpus(
   row: CorpusInsert,
 ): Promise<{ docId: number; chunks: CorpusChunk[] }> {
   const sqlite = await import('node:sqlite')
+  await ensureDocumentsLibrary(dbFile)
   const db = new sqlite.DatabaseSync(dbFile)
   try {
     db.exec('PRAGMA journal_mode = WAL')
     const info = db
       .prepare(
-        `INSERT INTO documents (title, organization, year, doc_type, topic, md_path, source_text, source_key, is_sample, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'approved')`,
+        `INSERT INTO documents (title, organization, year, doc_type, topic, library, md_path, source_text, source_key, is_sample, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'approved')`,
       )
       .run(
         row.title,
@@ -125,6 +133,7 @@ async function insertCorpus(
         row.year,
         row.docType === '' ? null : row.docType,
         row.topic,
+        row.library,
         row.mdPath,
         row.markdown,
         row.sourceKey,

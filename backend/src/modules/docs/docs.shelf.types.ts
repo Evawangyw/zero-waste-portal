@@ -45,6 +45,8 @@ export interface ShelfItem {
   readonly org: string
   readonly docType: string
   readonly topics: readonly string[]
+  /** 知识领域第一层。空值一律为 MISSING_LABEL */
+  readonly library: string
   /** WeKnora 侧最后更新时间；上游缺失为 null */
   readonly updatedAt: string | null
   /** 本地索引更新时间（前端可显示"索引于…"） */
@@ -74,6 +76,8 @@ export interface ShelfAppliedFilters {
   readonly org: readonly string[]
   readonly year: readonly string[]
   readonly tag: readonly string[]
+  /** 知识领域第一层；null = 不限 */
+  readonly library: string | null
   readonly q: string | null
   /** 发布机构模糊搜索词；null = 不搜 */
   readonly orgq: string | null
@@ -92,6 +96,8 @@ export interface ShelfFacetsResponse {
   readonly orgs: readonly ShelfFacet[]
   readonly years: readonly ShelfFacet[]
   readonly tags: readonly ShelfFacet[]
+  /** 知识领域第一层：零废弃 / 化学品 */
+  readonly libraries: readonly ShelfFacet[]
   /** 索引内总条数（前端算"未标注"占比/空态用） */
   readonly total: number
 }
@@ -116,6 +122,8 @@ export interface ShelfQuery {
   readonly orgQuery: string | null
   readonly years: readonly string[]
   readonly tags: readonly string[]
+  /** 知识领域第一层。null = 不限 */
+  readonly library: string | null
   /** 文件名/可读标题模糊搜索词；null = 不搜 */
   readonly q: string | null
   readonly page: number

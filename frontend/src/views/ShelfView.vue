@@ -26,6 +26,7 @@ interface Filters {
 }
 
 const filters = reactive<Filters>({ type: [], year: [], tag: [] })
+const library = ref('')
 const orgKeyword = ref('')
 const keyword = ref(readQueryString('q'))
 const sort = ref<ShelfSort>(readSortFromQuery())
@@ -40,6 +41,7 @@ const facets = reactive({
   orgs: [] as readonly ShelfFacet[],
   years: [] as readonly ShelfFacet[],
   tags: [] as readonly ShelfFacet[],
+  libraries: [] as readonly ShelfFacet[],
 })
 
 const loading = ref(false)
@@ -57,6 +59,7 @@ interface ShelfBook {
   readonly org: string
   readonly docType: string
   readonly topics: readonly string[]
+  readonly library: string
   readonly spine: string
   readonly height: number
   readonly pages: readonly string[]
@@ -82,6 +85,16 @@ const selectedTopic = computed({
   },
 })
 
+const selectedLibrary = computed({
+  get: () => library.value,
+  set: (value: string | null | undefined) => {
+    library.value = value ?? ''
+    filters.tag = []
+    onFilterChange()
+    void loadFacets()
+  },
+})
+
 function chunkBooks(books: readonly ShelfBook[]): ShelfBook[][] {
   const size = Math.max(booksPerRow.value, 1)
   const rows: ShelfBook[][] = []
@@ -96,6 +109,14 @@ const openedBook = computed(() => displayBooks.value.find((book) => book.id === 
 const yearChoices = computed(() => facetChoices(facets.years, (book) => book.year))
 const typeChoices = computed(() => facetChoices(facets.types, (book) => book.docType))
 const tagChoices = computed(() => facetChoices(facets.tags, (book) => book.topics))
+
+const libraryChoices = computed(() =>
+  [...facets.libraries].sort((left, right) => {
+    const rank = (value: string) => (value === '零废弃' ? 0 : value === '化学品' ? 1 : value === MISSING_LABEL ? 2 : 3)
+    const diff = rank(left.value) - rank(right.value)
+    return diff !== 0 ? diff : right.count - left.count
+  }),
+)
 
 const topicChoices = computed(() =>
   [...tagChoices.value].sort((left, right) => {
@@ -141,6 +162,7 @@ const activeFilterCount = computed(
     filters.type.length +
     filters.year.length +
     filters.tag.length +
+    (library.value === '' ? 0 : 1) +
     (orgKeyword.value.trim() === '' ? 0 : 1),
 )
 
@@ -168,11 +190,12 @@ function firstPickedLabel(): string | null {
 
 async function loadFacets(): Promise<void> {
   try {
-    const response = await fetchFacets()
+    const response = await fetchFacets(library.value)
     facets.types = response.types
     facets.orgs = response.orgs
     facets.years = response.years
     facets.tags = response.tags
+    facets.libraries = response.libraries
     indexTotal.value = response.total
   } catch (err) {
     // facets 挂了不影响列表主体，只提示一句
@@ -193,6 +216,7 @@ async function loadList(): Promise<void> {
     orgq: orgKeyword.value.trim(),
     year: filters.year,
     tag: filters.tag,
+    lib: library.value,
     q: keyword.value.trim(),
     page: page.value,
     pageSize: SHELF_PAGE_SIZE,
@@ -238,6 +262,7 @@ function filterProxyBooks(): readonly ShelfBook[] {
     if (!matchesAny(filters.year, book.year)) return false
     if (!matchesOrgKeyword(book.org)) return false
     if (!matchesAny(filters.type, book.docType)) return false
+    if (library.value !== '') return false
     if (filters.tag.length > 0 && !book.topics.some((topic) => filters.tag.includes(topic))) return false
     if (text === '') return true
     const haystack = [book.title, book.org, book.docType, book.year, ...book.topics].join(' ').toLowerCase()
@@ -256,7 +281,7 @@ function matchesOrgKeyword(org: string): boolean {
 }
 
 function proxyToShelfBook(book: ProxyBook): ShelfBook {
-  return { ...book, proxy: true, detailTo: null }
+  return { ...book, library: '', proxy: true, detailTo: null }
 }
 
 function toShelfBook(item: ShelfItem): ShelfBook {
@@ -268,11 +293,12 @@ function toShelfBook(item: ShelfItem): ShelfBook {
     org: presentValue(item.org),
     docType: presentValue(item.docType),
     topics: item.topics,
+    library: presentValue(item.library),
     spine: tone,
     height: 156 + (Math.abs(hashText(item.id)) % 5) * 8,
     pages: [
       [item.org, item.year, item.docType].filter((part) => part !== '').join(' · '),
-      item.topics.length > 0 ? `知识领域：${item.topics.join('、')}` : '知识领域未标注',
+      domainLine(presentValue(item.library), item.topics),
       '点击下方入口可打开这条资料的详情、预览和下载。',
     ].filter((line) => line !== ''),
     proxy: false,
@@ -281,6 +307,11 @@ function toShelfBook(item: ShelfItem): ShelfBook {
 }
 
 const SPINE_TONES = ['#1f6b4a', '#8c3a3a', '#3d4f7c', '#8a6232', '#6b3a4a', '#1e4d6b', '#4a3f35']
+
+function domainLine(shelfLibrary: string, topics: readonly string[]): string {
+  const parts = [shelfLibrary, ...topics.filter((topic) => topic !== '')]
+  return parts.length > 0 ? `知识领域：${parts.join(' · ')}` : '知识领域未标注'
+}
 
 function presentValue(value: string): string {
   return value === '' || value === MISSING_LABEL ? '' : value
@@ -348,8 +379,10 @@ function clearFilters(): void {
   orgKeyword.value = ''
   filters.year = []
   filters.tag = []
+  library.value = ''
   keyword.value = ''
   page.value = 1
+  void loadFacets()
   void syncUrlAndReload()
 }
 
@@ -386,6 +419,7 @@ async function syncUrlAndReload(): Promise<void> {
   if (orgText !== '') query['orgq'] = orgText
   for (const value of filters.year) appendMulti(query, 'year', value)
   for (const value of filters.tag) appendMulti(query, 'tag', value)
+  if (library.value !== '') query['lib'] = library.value
   await router.replace({ path: '/shelf', query })
   await loadList()
 }
@@ -428,6 +462,7 @@ function hydrateFromRoute(): void {
   orgKeyword.value = readQueryString('orgq')
   filters.year = readFiltersFromQuery('year')
   filters.tag = readFiltersFromQuery('tag')
+  library.value = readQueryString('lib')
   keyword.value = readQueryString('q')
   sort.value = readSortFromQuery()
   const pageParam = Number(readQueryString('page'))
@@ -567,10 +602,23 @@ watch(
         <el-col :xs="24" :sm="12" :lg="6">
           <div class="facet-label">知识领域</div>
           <el-select
-            v-model="selectedTopic"
+            v-model="selectedLibrary"
             clearable
             placeholder="全部"
             class="facet-select"
+          >
+            <el-option
+              v-for="facet in libraryChoices"
+              :key="facet.value"
+              :label="`${displayOrMissing(facet.value)}（${facet.count}）`"
+              :value="facet.value"
+            />
+          </el-select>
+          <el-select
+            v-model="selectedTopic"
+            clearable
+            placeholder="细分"
+            class="facet-select facet-sub"
           >
             <el-option
               v-for="facet in topicChoices"
@@ -652,7 +700,7 @@ watch(
             <div class="open-pages">
               <p class="open-meta">
                 {{
-                  [openedBook.docType, openedBook.topics.join('、')]
+                  [openedBook.docType, [openedBook.library, openedBook.topics.join('、')].filter((part) => part !== '').join(' · ')]
                     .filter((part) => part !== '')
                     .join(' · ') || '未标注'
                 }}
@@ -734,6 +782,10 @@ watch(
 
 .facet-select {
   width: 100%;
+}
+
+.facet-sub {
+  margin-top: 8px;
 }
 
 .error-alert {

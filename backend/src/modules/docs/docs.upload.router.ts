@@ -69,7 +69,13 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
 
 async function registerSomark(
   stored: { readonly id: string; readonly title: string; readonly fileName: string; readonly fileSize: number },
-  form: { readonly year: string; readonly org: string; readonly docType: string; readonly topic: string },
+  form: {
+    readonly year: string
+    readonly org: string
+    readonly docType: string
+    readonly topic: string
+    readonly library: string
+  },
   located: Awaited<ReturnType<typeof locateAdminUploadFile>>,
 ): Promise<SomarkJob> {
   if (located === null || located.kind !== 'file') {
@@ -92,5 +98,6 @@ async function registerSomark(
     org: form.org,
     docType: form.docType,
     topic: form.topic,
+    library: form.library,
   })
 }

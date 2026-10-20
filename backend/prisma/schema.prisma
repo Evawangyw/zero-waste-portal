@@ -212,6 +212,8 @@ model KnowledgeIndex {
   docType         String   @default("")
   /// 主题多值（来自 custom_metadata."知识领域"，按 ,/、/；/空格 拆成 JSON 数组串）
   topics          String   @default("[]")
+  /// 知识领域第一层：零废弃或化学品。空串表示还没归到这两张表。
+  library         String   @default("")
   /// 是否对公众展示。false = 已下架：书架、打开、下载和问答都不再使用，文件仍保留。
   listed          Boolean  @default(true)
   /// WeKnora 侧最后更新时间（原样保留）
