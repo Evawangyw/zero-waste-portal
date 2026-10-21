@@ -82,6 +82,7 @@ watch(isLoggedIn, (loggedIn) => {
 
 .ask-shell {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -161,8 +162,17 @@ watch(isLoggedIn, (loggedIn) => {
 }
 
 @media (max-width: 800px) {
+  .app-main {
+    padding: 16px 12px 32px;
+  }
+
+  .app-footer {
+    padding: 24px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+
   .footer-inner {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 }
 </style>

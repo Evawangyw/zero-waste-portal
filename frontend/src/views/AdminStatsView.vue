@@ -592,7 +592,7 @@ onUnmounted(() => {
         @change="onUploadPicked"
       />
 
-      <el-dialog v-model="uploadOpen" title="上传资料" width="480px" :close-on-click-modal="!uploadBusy" :show-close="!uploadBusy" @close="closeUpload">
+      <el-dialog v-model="uploadOpen" title="上传资料" width="min(480px, calc(100vw - 24px))" :close-on-click-modal="!uploadBusy" :show-close="!uploadBusy" @close="closeUpload">
         <p class="upload-file">{{ uploadFile?.name }}</p>
         <p class="metric-note">上传后用 SoMark 转成 Markdown，写入书架和问答。页数多时会多等一会儿。</p>
         <el-form label-position="top">

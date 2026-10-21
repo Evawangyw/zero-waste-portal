@@ -88,3 +88,42 @@ h2,
 .el-textarea__inner {
   background: #f8f7f1;
 }
+
+img,
+video,
+iframe {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .el-card__header {
+    padding: 14px;
+  }
+
+  .el-card__body {
+    padding: 14px;
+  }
+
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px);
+    margin-right: 12px;
+    margin-left: 12px;
+  }
+
+  .el-message-box {
+    width: calc(100vw - 32px) !important;
+  }
+
+  .el-select-dropdown {
+    max-width: calc(100vw - 24px);
+  }
+
+  .el-select-dropdown__item {
+    height: auto;
+    line-height: 1.45;
+    white-space: normal;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}

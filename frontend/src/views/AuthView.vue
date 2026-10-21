@@ -2,7 +2,7 @@
 // 登录 / 注册页（T05）：调 T02 的 /api/auth/register 与 /api/auth/login。
 // 注册 = 五字段（姓名/机构/岗位/关注议题/手机号）+ 密码 + 隐私勾选。
 // 支持 ?redirect=xxx 登录成功后回跳（详情页下载未登录时带过来）。
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { authErrorCode, fieldIssues, login as apiLogin, register as apiRegister } from '../api/auth'
@@ -25,6 +25,21 @@ function readTab(): TabName {
 }
 
 const activeTab = ref<TabName>(readTab())
+const narrowForm = ref(window.matchMedia('(max-width: 640px)').matches)
+const narrowMedia = window.matchMedia('(max-width: 640px)')
+
+function syncNarrowForm(): void {
+  narrowForm.value = narrowMedia.matches
+}
+
+onMounted(() => {
+  syncNarrowForm()
+  narrowMedia.addEventListener('change', syncNarrowForm)
+})
+
+onUnmounted(() => {
+  narrowMedia.removeEventListener('change', syncNarrowForm)
+})
 const fromIntro = computed(() => route.query['from'] === 'intro')
 
 const loginFormRef = ref<FormInstance>()
@@ -243,7 +258,8 @@ function errorFor(field: string): string {
             ref="loginFormRef"
             :model="loginForm"
             :rules="loginRules"
-            label-width="90px"
+            :label-position="narrowForm ? 'top' : 'right'"
+            :label-width="narrowForm ? 'auto' : '90px'"
             @submit.prevent="onLogin"
           >
             <el-form-item label="手机号" prop="phone" :error="errorFor('phone')">
@@ -272,7 +288,8 @@ function errorFor(field: string): string {
             ref="registerFormRef"
             :model="registerForm"
             :rules="registerRules"
-            label-width="90px"
+            :label-position="narrowForm ? 'top' : 'right'"
+            :label-width="narrowForm ? 'auto' : '90px'"
             @submit.prevent="onRegister"
           >
             <el-form-item label="姓名" prop="name" :error="errorFor('name')">
@@ -370,5 +387,12 @@ function errorFor(field: string): string {
   margin: 0;
   font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+
+@media (max-width: 640px) {
+  .auth-title {
+    font-size: 26px;
+  }
+
 }
 </style>

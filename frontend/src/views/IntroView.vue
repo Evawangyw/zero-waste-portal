@@ -657,13 +657,60 @@ h1 {
 }
 
 @media (max-width: 720px) {
-  .totals,
-  .bars li {
+  .topbar,
+  .dock {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .dock {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .panel {
+    width: min(1080px, calc(100% - 28px));
+  }
+
+  .totals {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .figure {
+    font-size: 56px;
+  }
+
+  .bars li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name count'
+      'track track';
+    gap: 4px 10px;
+  }
+
+  .bar-name {
+    grid-area: name;
+  }
+
+  .bar-track {
+    grid-area: track;
   }
 
   .bar-count {
-    text-align: left;
+    grid-area: count;
+    min-width: 0;
+    text-align: right;
+  }
+
+  .year-scroll {
+    margin-right: -4px;
+    margin-left: -4px;
+    padding-bottom: 6px;
+  }
+
+  .year-plot {
+    height: 200px;
   }
 
   h1 {

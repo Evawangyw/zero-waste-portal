@@ -455,4 +455,18 @@ function formatParseStatus(raw: string): string {
   color: var(--el-text-color-secondary);
   word-break: break-all;
 }
+
+@media (max-width: 760px) {
+  .doc-title {
+    font-size: 22px;
+  }
+
+  .preview-box {
+    min-height: 240px;
+  }
+
+  .preview-frame {
+    height: 70vh;
+  }
+}
 </style>

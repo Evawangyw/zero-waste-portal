@@ -1004,7 +1004,10 @@ async function scrollToEnd(): Promise<void> {
     flex: none;
     width: auto;
     max-width: 180px;
+    overflow: hidden;
     background: rgba(255, 255, 255, 0.7);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .chat-welcome {
@@ -1021,6 +1024,24 @@ async function scrollToEnd(): Promise<void> {
 
   .conversation {
     padding: 28px 16px 12px;
+  }
+
+  .chat-main {
+    padding-bottom: calc(148px + env(safe-area-inset-bottom));
+  }
+
+  .quick-grid button {
+    min-height: 0;
+    padding: 14px 36px 14px 14px;
+  }
+
+  .user-message span {
+    max-width: 88%;
+  }
+
+  .composer-wrap {
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: min(740px, calc(100% - 20px));
   }
 }
 </style>

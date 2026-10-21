@@ -129,5 +129,9 @@ h2 {
   h1 {
     font-size: 26px;
   }
+
+  .hero {
+    padding-top: 8px;
+  }
 }
 </style>

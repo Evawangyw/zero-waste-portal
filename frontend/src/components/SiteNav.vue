@@ -170,29 +170,53 @@ void authToken
 }
 
 @media (max-width: 860px) {
+  .site-nav {
+    padding-top: env(safe-area-inset-top);
+  }
+
   .nav-inner {
-    flex-wrap: wrap;
-    gap: 10px 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 10px 14px 12px;
   }
 
   .nav-links {
-    order: 3;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
     width: 100%;
     margin-left: 0;
-    gap: 18px;
+    gap: 6px;
   }
 
   .nav-links a {
-    font-size: 16px;
+    padding: 8px 6px;
+    font-size: 13px;
+    line-height: 1.3;
+    text-align: center;
+    white-space: normal;
   }
 
   .brand-mark {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .brand-org,
+  .brand-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .brand-name {
-    font-size: 17px;
+    font-size: 16px;
+  }
+
+  .user-name {
+    display: none;
   }
 }
 </style>

@@ -106,6 +106,10 @@ function piecesOf(pieces: readonly InlinePiece[]): readonly InlinePiece[] {
 </template>
 
 <style scoped>
+.answer-md {
+  overflow-wrap: anywhere;
+}
+
 .answer-md :is(h2, h3, h4) {
   margin: 18px 0 8px;
   color: #143024;

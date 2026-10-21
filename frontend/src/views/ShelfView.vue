@@ -48,6 +48,7 @@ const loading = ref(false)
 const loadError = ref('')
 const openedBookId = ref<string | null>(null)
 const booksPerRow = ref(4)
+const compactPager = ref(false)
 
 /** 索引为空时用占位书把书架摆出来；有真实资料后改回接口结果。 */
 const usingProxy = computed(() => indexTotal.value === 0 && items.value.length === 0 && loadError.value === '')
@@ -338,7 +339,8 @@ function sortBooks(books: readonly ShelfBook[]): readonly ShelfBook[] {
 
 function measureShelf(): void {
   const width = window.innerWidth
-  booksPerRow.value = width >= 1100 ? 8 : width >= 760 ? 6 : 4
+  booksPerRow.value = width >= 1100 ? 8 : width >= 760 ? 6 : width >= 480 ? 4 : 3
+  compactPager.value = width < 640
 }
 
 function toggleBook(id: string): void {
@@ -519,7 +521,7 @@ watch(
     <el-card shadow="never" class="filter-card">
       <div class="filter-head">
         <h2 class="filter-title">资料书架</h2>
-        <el-space>
+        <el-space wrap>
           <el-tag type="info" effect="plain">索引共 {{ indexTotal }} 条</el-tag>
           <el-tag v-if="activeFilterCount > 0" type="warning" effect="plain">
             生效筛选 {{ activeFilterCount }} 项
@@ -657,7 +659,7 @@ watch(
           <div class="zero-ask">
             <p class="zero-text">换个问法试试，AI 助手会带着你当前的关键词去知识库里找：</p>
             <p class="zero-question">{{ zeroResultQuestion }}</p>
-            <el-space>
+            <el-space wrap>
               <el-button type="primary" @click="askAiAboutZeroResult">试试问 AI</el-button>
               <el-button @click="clearFilters">清空筛选再找</el-button>
             </el-space>
@@ -723,7 +725,8 @@ watch(
 
       <div v-if="totalPages > 1" class="pager">
         <el-pagination
-          layout="prev, pager, next, total"
+          :layout="compactPager ? 'prev, pager, next' : 'prev, pager, next, total'"
+          :pager-count="compactPager ? 5 : 7"
           :current-page="page"
           :page-size="SHELF_PAGE_SIZE"
           :total="total"
@@ -743,8 +746,10 @@ watch(
 
 .filter-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
@@ -934,6 +939,36 @@ watch(
 }
 
 @media (max-width: 640px) {
+  .filter-head {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .filter-title {
+    font-size: 26px;
+  }
+
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input,
+  .sort-select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .filter-row :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .list-head {
+    align-items: flex-start;
+    line-height: 1.5;
+  }
+
   .open-book {
     grid-template-columns: 1fr;
   }
@@ -945,6 +980,16 @@ watch(
   .spine-title {
     max-height: 96px;
     font-size: 12px;
+  }
+
+  .pager {
+    justify-content: center;
+  }
+
+  .pager :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
   }
 }
 
