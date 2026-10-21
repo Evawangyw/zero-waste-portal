@@ -2,10 +2,12 @@
 // 契约：
 //   GET /api/docs/:id            -> 200 DocDetailResponse | 401 | 404 | 400  ← requireAuth
 //   GET /api/docs/:id/preview    -> 200 流 | 200 PreviewEnvelope(unsupported/tooLarge) | 401 | 404
+//   GET /api/docs/:id/preview-ticket -> 200 PreviewTicketResponse | 200 PreviewEnvelope | 401 | 404
+//   GET /api/docs/:id/preview-named/:fileName?ticket= -> 200 流 | 401 | 404
 //   GET /api/docs/:id/download   -> 200 流(attachment, 重命名) | 401 | 404  ← requireAuth 保护
 //
 // 实现要点：
-//  - 三条路由都挂在 docs 模块自己的 fileRouter 上（不动 auth/shelf 已验收代码）
+//  - 预览/下载路由都挂在 docs 模块自己的 fileRouter 上（不动 auth/shelf 已验收代码）
 //  - 下载用 T02 导出的 requireAuth + getAuthContext 解 JWT，**只 import 不修改**
 //  - 预览/下载只读本机原文，不回源引擎；客户端断开时停掉文件流
 //  - 下载日志在**开流之前**写，保证「已授权的下载尝试」一定留痕（写日志失败不阻断下载）
@@ -26,11 +28,18 @@ import {
   resolveDocForDownload,
   writeDownloadLog,
 } from './docs.file.service.js'
+import {
+  buildNamedPreviewUrl,
+  issuePreviewTicket,
+  verifyPreviewTicket,
+} from './docs.preview.ticket.js'
 import type {
   DocDetailResponse,
   DocFileErrorKind,
   DocFileErrorResponse,
+  PreviewDecision,
   PreviewEnvelope,
+  PreviewTicketResponse,
 } from './docs.file.types.js'
 
 export const fileRouter: Router = Router()
@@ -66,6 +75,15 @@ fileRouter.get('/api/docs/:id/preview', requireAuth, (req: Request, res: Respons
   void handlePreview(req, res)
 })
 
+fileRouter.get('/api/docs/:id/preview-ticket', requireAuth, (req: Request, res: Response) => {
+  void handlePreviewTicket(req, res)
+})
+
+// :fileName 只出现在地址里，给 PDF 工具栏当显示名；找文件仍只认 :id + ticket
+fileRouter.get('/api/docs/:id/preview-named/:fileName', (req: Request, res: Response) => {
+  void handlePreviewNamed(req, res)
+})
+
 async function handlePreview(req: Request, res: Response): Promise<void> {
   const id = readId(req.params['id'])
   if (id === null) {
@@ -73,69 +91,158 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
     return
   }
   if (await refuseUnlisted(id, res)) return
+  const opened = await openPreview(id)
+  await sendPreview(res, opened, req)
+}
 
+async function handlePreviewTicket(req: Request, res: Response): Promise<void> {
+  const id = readId(req.params['id'])
+  if (id === null) {
+    respondError(res, 400, 'bad_request', '资料 ID 不合法')
+    return
+  }
+  if (await refuseUnlisted(id, res)) return
+  const opened = await openPreview(id)
+  if (opened.kind !== 'file') {
+    await sendPreview(res, opened)
+    return
+  }
+  let listed: boolean | null
+  try {
+    listed = await isDocListed(id)
+  } catch (err) {
+    respondInternal(res, '查询资料状态失败', err)
+    return
+  }
+  const ticket = issuePreviewTicket(id, listed === false)
+  const body: PreviewTicketResponse = {
+    success: true,
+    ticket,
+    fileName: opened.fileName,
+    url: buildNamedPreviewUrl(id, opened.fileName, ticket),
+  }
+  respondJson<PreviewTicketResponse>(res, 200, body)
+}
+
+async function handlePreviewNamed(req: Request, res: Response): Promise<void> {
+  const id = readId(req.params['id'])
+  if (id === null) {
+    respondError(res, 400, 'bad_request', '资料 ID 不合法')
+    return
+  }
+  const ticket = readTicket(req.query['ticket'])
+  if (ticket === null) {
+    respondError(res, 401, 'unauthorized', '预览链接无效，请刷新页面')
+    return
+  }
+  const grant = verifyPreviewTicket(ticket, id)
+  if (grant === null) {
+    respondError(res, 401, 'unauthorized', '预览链接已失效，请刷新页面')
+    return
+  }
+  if (!grant.allowUnlisted) {
+    try {
+      if ((await isDocListed(id)) === false) {
+        respondError(res, 404, 'not_found', '资料不存在或尚未收录')
+        return
+      }
+    } catch (err) {
+      respondInternal(res, '查询资料状态失败', err)
+      return
+    }
+  }
+  const opened = await openPreview(id)
+  if (opened.kind === 'file') {
+    // 不写 filename=。ASCII 兜底会把中文变成下划线，PDF 工具栏可能优先显示它。
+    // 地址最后一段已经是原文件名，工具栏和「另存为」都读这一段。
+    await pipeLocalFile(res, opened.path, { ...opened.options, includeFileName: false }, req)
+    return
+  }
+  await sendPreview(res, opened)
+}
+
+type PreviewOpen =
+  | { readonly kind: 'error'; readonly status: number; readonly errorKind: DocFileErrorKind; readonly message: string }
+  | { readonly kind: 'envelope'; readonly envelope: PreviewEnvelope }
+  | { readonly kind: 'file'; readonly path: string; readonly fileName: string; readonly options: PipeBinaryOptions }
+
+async function openPreview(id: string): Promise<PreviewOpen> {
   let detail: DocDetailResponse | null
   try {
     detail = await resolveDocDetail(id)
   } catch (err) {
-    respondInternal(res, '解析预览信息失败', err)
-    return
+    const detailText = err instanceof Error ? err.message : String(err)
+    console.error(`[docs.file] 解析预览信息失败：${detailText}`)
+    return {
+      kind: 'error',
+      status: 500,
+      errorKind: 'internal',
+      message: '解析预览信息失败（详见服务端日志）',
+    }
   }
   if (detail === null) {
-    respondError(res, 404, 'not_found', '资料不存在或尚未收录')
-    return
+    return { kind: 'error', status: 404, errorKind: 'not_found', message: '资料不存在或尚未收录' }
   }
 
-  // 判据来自索引（file_type / file_size），不打引擎就能决定
   const decision = decidePreview(detail.doc.fileType, detail.doc.fileSize)
   if (!decision.streamable) {
-    const envelope: PreviewEnvelope = {
-      success: true,
-      preview: decision,
-      id: detail.doc.id,
-      title: detail.doc.title,
-      fileType: detail.doc.fileType,
-      fileSize: detail.doc.fileSize,
-      downloadUrl: `/api/docs/${encodeURIComponent(detail.doc.id)}/download`,
-    }
-    respondJson<PreviewEnvelope>(res, 200, envelope)
-    return
-  }
-
-  const previewName =
-    detail.doc.fileName === '' ? `${detail.doc.id}.${detail.doc.fileType}` : detail.doc.fileName
-  const previewOptions: PipeBinaryOptions = {
-    disposition: 'inline',
-    contentType: decision.contentType,
-    fileName: previewName,
-    contentLength: decision.sizeBytes,
-    extraHeaders: {
-      'X-Preview-Max-Bytes': String(decision.maxBytes),
-      'X-Preview-Too-Large': 'false',
-    },
+    return { kind: 'envelope', envelope: buildPreviewEnvelope(detail, decision) }
   }
 
   const located = await resolveLocalFile(id)
   if (located?.kind !== 'file') {
-    const envelope: PreviewEnvelope = {
-      success: true,
-      preview: {
+    return {
+      kind: 'envelope',
+      envelope: buildPreviewEnvelope(detail, {
         ...decision,
         streamable: false,
         unsupported: true,
         reason: '本机没有这份原文，暂时不能在线预览',
-      },
-      id: detail.doc.id,
-      title: detail.doc.title,
-      fileType: detail.doc.fileType,
-      fileSize: detail.doc.fileSize,
-      downloadUrl: `/api/docs/${encodeURIComponent(detail.doc.id)}/download`,
+      }),
     }
-    respondJson<PreviewEnvelope>(res, 200, envelope)
-    return
   }
 
-  await pipeLocalFile(res, located.path, { ...previewOptions, contentLength: located.size })
+  const fileName =
+    detail.doc.fileName === '' ? `${detail.doc.id}.${detail.doc.fileType}` : detail.doc.fileName
+  const options: PipeBinaryOptions = {
+    disposition: 'inline',
+    contentType: decision.contentType,
+    fileName,
+    contentLength: located.size,
+    extraHeaders: {
+      'X-Preview-Max-Bytes': String(decision.maxBytes),
+      'X-Preview-Too-Large': 'false',
+      'Referrer-Policy': 'no-referrer',
+      // no-store 会让 Chrome 的 PDF 插件拿不到正文：工具栏能写出文件名，页面却是空白。
+      // 地址里带票据，缓存只跟着这一条预览链接走。
+      'Cache-Control': 'private, max-age=7200',
+    },
+  }
+  return { kind: 'file', path: located.path, fileName, options }
+}
+
+function buildPreviewEnvelope(detail: DocDetailResponse, decision: PreviewDecision): PreviewEnvelope {
+  return {
+    success: true,
+    preview: decision,
+    id: detail.doc.id,
+    title: detail.doc.title,
+    fileType: detail.doc.fileType,
+    fileSize: detail.doc.fileSize,
+    downloadUrl: `/api/docs/${encodeURIComponent(detail.doc.id)}/download`,
+  }
+}
+
+async function sendPreview(res: Response, opened: PreviewOpen, req?: Request): Promise<void> {
+  if (opened.kind === 'error') {
+    respondError(res, opened.status, opened.errorKind, opened.message)
+    return
+  }
+  if (opened.kind === 'envelope') {
+    respondJson<PreviewEnvelope>(res, 200, opened.envelope)
+    return
+  }
+  await pipeLocalFile(res, opened.path, opened.options, req)
 }
 
 // ------------------------------------------------------------------ 下载
@@ -201,7 +308,7 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
       'X-Download-Source': located?.kind === 'file' ? 'corpus' : resolved.source,
     },
   }
-  await pipeLocalFile(res, located.path, downloadOptions)
+  await pipeLocalFile(res, located.path, downloadOptions, req)
 }
 
 // ------------------------------------------------------------------ 本机原文
@@ -218,24 +325,30 @@ async function resolveLocalFile(
 }
 
 /** 语料 PDF 直接从磁盘流出，不经过 WeKnora，也不把整份文件读进内存。 */
-async function pipeLocalFile(res: Response, filePath: string, options: PipeBinaryOptions): Promise<void> {
-  const stream = createReadStream(filePath)
+async function pipeLocalFile(
+  res: Response,
+  filePath: string,
+  options: PipeBinaryOptions,
+  req?: Request,
+): Promise<void> {
+  const range = parseSingleByteRange(readRangeHeader(req), options.contentLength)
+  if (range === 'unsatisfiable') {
+    res.status(416)
+    res.setHeader('Content-Range', `bytes */${options.contentLength}`)
+    res.end()
+    return
+  }
+
+  const stream =
+    range === null
+      ? createReadStream(filePath)
+      : createReadStream(filePath, { start: range.start, end: range.end })
   const onClientClose = (): void => {
     stream.destroy()
   }
   res.on('close', onClientClose)
   try {
-    res.status(200)
-    res.setHeader('Content-Type', options.contentType)
-    res.setHeader('Content-Disposition', buildContentDisposition(options.disposition, options.fileName))
-    res.setHeader('Cache-Control', 'private, no-store')
-    res.setHeader('X-Content-Type-Options', 'nosniff')
-    if (options.contentLength > 0) {
-      res.setHeader('Content-Length', String(options.contentLength))
-    }
-    for (const [key, value] of Object.entries(options.extraHeaders ?? {})) {
-      res.setHeader(key, value)
-    }
+    writeBinaryHeaders(res, options, range)
     await pipeline(stream, res)
   } catch (err) {
     if (res.headersSent) {
@@ -250,6 +363,73 @@ async function pipeLocalFile(res: Response, filePath: string, options: PipeBinar
   }
 }
 
+function writeBinaryHeaders(
+  res: Response,
+  options: PipeBinaryOptions,
+  range: { readonly start: number; readonly end: number } | null,
+): void {
+  const status = range === null ? 200 : 206
+  res.status(status)
+  res.setHeader('Content-Type', options.contentType)
+  res.setHeader(
+    'Content-Disposition',
+    options.includeFileName === false
+      ? options.disposition
+      : buildContentDisposition(options.disposition, options.fileName),
+  )
+  res.setHeader('Cache-Control', 'private, no-store')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Accept-Ranges', 'bytes')
+  if (range === null) {
+    if (options.contentLength > 0) {
+      res.setHeader('Content-Length', String(options.contentLength))
+    }
+  } else {
+    const length = range.end - range.start + 1
+    res.setHeader('Content-Length', String(length))
+    res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${options.contentLength}`)
+  }
+  for (const [key, value] of Object.entries(options.extraHeaders ?? {})) {
+    res.setHeader(key, value)
+  }
+}
+
+function readRangeHeader(req: Request | undefined): string | undefined {
+  const raw = req?.headers.range
+  return typeof raw === 'string' ? raw : undefined
+}
+
+/**
+ * 只认单一字节区间。多段 Range 或认不出的写法返回 null，调用方整文件返回。
+ * Chrome 的 PDF 插件按区间拉正文；整段 200 顶回去时，工具栏有文件名，页面是空的。
+ */
+export function parseSingleByteRange(
+  header: string | undefined,
+  size: number,
+): { readonly start: number; readonly end: number } | 'unsatisfiable' | null {
+  if (header === undefined || size <= 0) return null
+  const matched = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (matched === null) return null
+  const startText = matched[1] ?? ''
+  const endText = matched[2] ?? ''
+  if (startText === '' && endText === '') return null
+
+  let start: number
+  let end: number
+  if (startText === '') {
+    const suffix = Number(endText)
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) return 'unsatisfiable'
+    start = Math.max(size - suffix, 0)
+    end = size - 1
+  } else {
+    start = Number(startText)
+    end = endText === '' ? size - 1 : Number(endText)
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return 'unsatisfiable'
+  }
+  if (start < 0 || start >= size || end < start) return 'unsatisfiable'
+  return { start, end: Math.min(end, size - 1) }
+}
+
 // ------------------------------------------------------------------ 本机文件头
 
 interface PipeBinaryOptions {
@@ -258,6 +438,8 @@ interface PipeBinaryOptions {
   readonly fileName: string
   /** 已知字节数；0/未知则不设 Content-Length（浏览器按 chunked 收） */
   readonly contentLength: number
+  /** false：只写 inline/attachment，文件名交给 URL 最后一段（避免中文被折成下划线） */
+  readonly includeFileName?: boolean
   readonly extraHeaders?: Readonly<Record<string, string>> | undefined
 }
 
@@ -297,6 +479,13 @@ function readId(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
   return DOC_ID_RE.test(trimmed) ? trimmed : null
+}
+
+/** 预览票据：32 字节 base64url，约 43 字符。拒绝数组和带空格的值。 */
+function readTicket(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  return /^[A-Za-z0-9_-]{20,128}$/.test(trimmed) ? trimmed : null
 }
 
 function respondJson<T>(res: Response, status: number, body: T): void {

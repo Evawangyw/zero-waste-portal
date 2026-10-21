@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // 资料详情页（T05）：接 T04 的 /api/docs/:id、/preview、/download。
 // 下载按钮先查登录态：未登录跳 /auth?redirect=当前页（登录后回跳再来下载）。
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { fetchDocDetail, fetchDocDownload, fetchDocPreview } from '../api/docs'
+import { fetchDocDetail, fetchDocDownload, fetchDocPreviewTicket, isPreviewTicket } from '../api/docs'
 import { ApiError } from '../api/http'
 import type { DocDetailResponse, PreviewAvailability } from '../api/types'
 import { MISSING_LABEL } from '../constants'
@@ -48,9 +48,8 @@ const isPreviewable = computed(() => preview.value?.streamable === true)
 const downloadFileName = computed(() => detail.value?.download.fileName ?? '')
 
 /**
- * 预览 iframe 的标题（P2-3：原来写死「资料预览」，而浏览器 PDF 阅读器顶部
- * 显示的是 blob URL 里的 UUID，看着像出了故障）。改用原文件名，
- * 至少 frame 的可访问名与浏览器标签是可读的。
+ * iframe 的可访问名。工具栏上的文件名另由预览地址的最后一段决定
+ * （见 loadPreview：打开 /preview-named/<原文件名>，而不是 blob UUID）。
  */
 const previewTitle = computed(() => {
   const name = detail.value?.doc.fileName ?? detail.value?.doc.readableTitle ?? ''
@@ -62,6 +61,10 @@ const parseStatusText = computed(() => formatParseStatus(detail.value?.doc.parse
 
 onMounted(() => {
   void loadDetail()
+})
+
+onBeforeUnmount(() => {
+  releasePreviewUrl()
 })
 
 async function loadDetail(): Promise<void> {
@@ -110,9 +113,17 @@ async function loadPreview(token: string): Promise<void> {
   }
   previewLoading.value = true
   try {
-    const response = await fetchDocPreview(docId.value, token)
-    const blob = await response.blob()
-    previewUrl.value = URL.createObjectURL(blob)
+    const opened = await fetchDocPreviewTicket(docId.value, token)
+    if (!isPreviewTicket(opened)) {
+      releasePreviewUrl()
+      previewUnavailableReason.value =
+        opened.preview.reason ?? '该资料不支持在线预览，可下载后查看'
+      return
+    }
+    // 直接打开带原文件名的地址。blob: URL 的最后一段是浏览器生成的 UUID，
+    // PDF 工具栏会把它当成文件名，和本页标题、原文件名对不上。
+    releasePreviewUrl()
+    previewUrl.value = opened.url
     previewUnavailableReason.value = ''
     // T07 埋点：预览开流成功（只在真的能看时记，不记"点了但看不了"）
     // 去重：同一 docId 只记一次，无论自动预载还是用户点按钮。
@@ -195,10 +206,10 @@ function triggerBrowserDownload(blob: Blob, fileName: string): void {
 }
 
 function releasePreviewUrl(): void {
-  if (previewUrl.value !== '') {
+  if (previewUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = ''
   }
+  previewUrl.value = ''
 }
 
 function displayOrMissing(value: string): string {
@@ -344,15 +355,15 @@ function formatParseStatus(raw: string): string {
         </div>
 
         <div v-else-if="isPreviewable" v-loading="previewLoading" class="preview-box">
+          <p v-if="previewUrl !== ''" class="preview-filename">
+            当前预览：{{ detail.doc.fileName || detail.doc.readableTitle }}
+          </p>
           <iframe
             v-if="previewUrl !== ''"
             :src="previewUrl"
             class="preview-frame"
             :title="previewTitle"
           />
-          <p v-if="previewUrl !== ''" class="preview-filename">
-            当前预览：{{ detail.doc.fileName || detail.doc.readableTitle }}
-          </p>
           <p v-else class="muted">预览加载中…</p>
         </div>
 
@@ -450,7 +461,7 @@ function formatParseStatus(raw: string): string {
 }
 
 .preview-filename {
-  margin: 8px 0 0;
+  margin: 0 0 8px;
   font-size: 13px;
   color: var(--el-text-color-secondary);
   word-break: break-all;

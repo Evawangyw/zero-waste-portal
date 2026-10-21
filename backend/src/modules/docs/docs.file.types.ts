@@ -12,6 +12,17 @@
 //   -> 200 + PreviewEnvelope（unsupported:true 或 tooLarge:true，引导前端改走下载）  【不可预览时】
 //   判据：非浏览器原生类型 -> unsupported；字节数 > PREVIEW_MAX_BYTES(20MB, env 可配) -> tooLarge。
 //
+// GET /api/docs/:id/preview-ticket   （必须登录）
+//   -> 200 PreviewTicketResponse { ticket, fileName, url }
+//   -> 200 PreviewEnvelope（不可预览时，与 /preview 相同）
+//   url 是同源路径，最后一段是原文件名。iframe 直接打开它，浏览器 PDF 工具栏
+//   才显示原文件名；先下成 blob 再预览时，工具栏只剩 blob URL 里的 UUID。
+//
+// GET /api/docs/:id/preview-named/:fileName?ticket=   （票据代替登录态，不挂 requireAuth）
+//   -> 200 二进制流（与 /preview 相同的正文）
+//   -> 401 票据缺失 / 过期 / 不是这份资料
+//   :fileName 只用于地址栏展示，不参与找文件。
+//
 // GET /api/docs/:id/download   （**必须登录**，用 T02 的 requireAuth 解 JWT）
 //   -> 200 + 二进制流（Content-Disposition: attachment; filename*=UTF-8''<年份>-<机构>-<标题>.ext）
 //   -> 401 未登录（由 auth 模块守卫给出）
@@ -134,6 +145,17 @@ export interface PreviewEnvelope {
   readonly fileType: string
   readonly fileSize: number
   readonly downloadUrl: string
+}
+
+/**
+ * 短时预览地址。ticket 只授权这一份资料的在线预览，不是登录 JWT。
+ * url 以原文件名结尾，给浏览器 PDF 阅读器当工具栏标题。
+ */
+export interface PreviewTicketResponse {
+  readonly success: true
+  readonly ticket: string
+  readonly fileName: string
+  readonly url: string
 }
 
 /** 文件层错误码 */

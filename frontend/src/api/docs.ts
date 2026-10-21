@@ -3,6 +3,7 @@ import { request } from './http'
 import type {
   DocDetailResponse,
   PreviewEnvelope,
+  PreviewTicketResponse,
   ShelfFacetsResponse,
   ShelfListResponse,
   ShelfSort,
@@ -64,6 +65,21 @@ export function fetchDocPreview(id: string, token: string): Promise<Response> {
   return request<Response>(`/docs/${encodeURIComponent(id)}/preview`, { token, raw: true })
 }
 
+/**
+ * GET /api/docs/:id/preview-ticket —— 换一张带原文件名的预览地址。
+ * 详情页 iframe 打开返回的 url，PDF 工具栏才会显示原文件名而不是 blob UUID。
+ * 不可预览时与 /preview 一样回 PreviewEnvelope。
+ */
+export function fetchDocPreviewTicket(
+  id: string,
+  token: string,
+): Promise<PreviewTicketResponse | PreviewEnvelope> {
+  return request<PreviewTicketResponse | PreviewEnvelope>(
+    `/docs/${encodeURIComponent(id)}/preview-ticket`,
+    { token },
+  )
+}
+
 /** GET /api/docs/:id/download —— 下载（**必须带 JWT**，后端写下载日志） */
 export function fetchDocDownload(id: string, token: string): Promise<Response> {
   return request<Response>(`/docs/${encodeURIComponent(id)}/download`, { token, raw: true })
@@ -74,6 +90,12 @@ function joinMulti(values: readonly string[] | undefined): string | undefined {
   if (values === undefined || values.length === 0) return undefined
   const kept = values.map((v) => v.trim()).filter((v) => v !== '')
   return kept.length === 0 ? undefined : kept.join(',')
+}
+
+export function isPreviewTicket(
+  value: PreviewTicketResponse | PreviewEnvelope,
+): value is PreviewTicketResponse {
+  return 'url' in value && typeof value.url === 'string' && value.url.startsWith('/api/docs/')
 }
 
 /** 预览回的是"不可预览信封"时，页面据此改走下载引导 */

@@ -27,6 +27,13 @@ import {
   writeDownloadLog,
 } from './docs.file.service.js'
 import { META_MISSING } from './docs.file.types.js'
+import {
+  buildNamedPreviewUrl,
+  issuePreviewTicket,
+  previewLeafName,
+  verifyPreviewTicket,
+} from './docs.preview.ticket.js'
+import { parseSingleByteRange } from './docs.file.router.js'
 
 let passed = 0
 const failures: string[] = []
@@ -370,9 +377,43 @@ async function testDetailResolve(): Promise<void> {
   await prisma.$disconnect()
 }
 
-// ================================================================ 7. 架构断言
+// ================================================================ 7. 预览票据（工具栏文件名）
+function testPreviewTicket(): void {
+  section('7. 预览票据：地址最后一段是原文件名，且不能串到别的资料')
+  const fileName = '304-社区堆肥综合效益评估报告-社区堆肥综合效益评估报告.pdf'
+  const ticket = issuePreviewTicket('doc-compost', false, 60_000)
+  const url = buildNamedPreviewUrl('doc-compost', fileName, ticket)
+  const leaf = decodeURIComponent(url.split('?')[0]?.split('/').pop() ?? '')
+
+  eq('路径最后一段等于原文件名', leaf, fileName)
+  check('查询串带 ticket，不带登录 JWT 的三段式', url.includes('ticket=') && !url.includes('eyJ'))
+  eq('同资料票据有效', verifyPreviewTicket(ticket, 'doc-compost')?.allowUnlisted, false)
+  check('不能拿去打开另一份资料', verifyPreviewTicket(ticket, 'doc-other') === null)
+  check('过期票据失效', verifyPreviewTicket(issuePreviewTicket('doc-old', false, -1), 'doc-old') === null)
+  eq('空文件名落到 preview.bin', previewLeafName('  '), 'preview.bin')
+  eq('路径分隔符被折成一段', previewLeafName('a/b\\c.pdf'), 'a-b-c.pdf')
+  eq('Range 起始区间', parseSingleByteRange('bytes=0-99', 1000), { start: 0, end: 99 })
+  eq('Range 读到文件尾', parseSingleByteRange('bytes=0-', 1000), { start: 0, end: 999 })
+  eq('Range 后缀', parseSingleByteRange('bytes=-100', 1000), { start: 900, end: 999 })
+  eq('Range 越过文件尾被夹住', parseSingleByteRange('bytes=10-5000', 1000), { start: 10, end: 999 })
+  eq('Range 起点越界', parseSingleByteRange('bytes=5000-', 1000), 'unsatisfiable')
+  check('多段 Range 交给整文件', parseSingleByteRange('bytes=0-1,2-3', 1000) === null)
+
+  const router = readSource('docs.file.router.ts')
+  check(
+    '换票据的路由挂了 requireAuth',
+    router.includes("'/api/docs/:id/preview-ticket', requireAuth"),
+  )
+  check(
+    '带文件名的预览地址不挂 requireAuth',
+    !router.includes("'/api/docs/:id/preview-named/:fileName', requireAuth"),
+  )
+  check('打开预览前核验票据', router.includes('verifyPreviewTicket(ticket, id)'))
+}
+
+// ================================================================ 8. 架构断言
 function testArchitecture(): void {
-  section('7. 架构断言（索引优先 / 模块边界）')
+  section('8. 架构断言（索引优先 / 模块边界）')
   const repo = readSource('docs.file.repo.ts')
   check('索引 repo 不 import weknora（详情不打引擎拿元数据）', !repo.includes('weknora'))
 
@@ -402,6 +443,7 @@ async function main(): Promise<void> {
   testResolveExtension()
   await testDownloadLog()
   await testDetailResolve()
+  testPreviewTicket()
   testArchitecture()
 
   console.log(`\n=== 汇总：${passed} PASS / ${failures.length} FAIL ===`)

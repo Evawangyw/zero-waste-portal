@@ -219,6 +219,14 @@ export interface DocDetailResponse {
   readonly upstreamAvailable: boolean
 }
 
+/** 短时预览地址。url 以原文件名结尾，浏览器 PDF 工具栏读这一段，不再显示 blob UUID。 */
+export interface PreviewTicketResponse {
+  readonly success: true
+  readonly ticket: string
+  readonly fileName: string
+  readonly url: string
+}
+
 /** 预览不可用时后端回的信封（形状固定，前端一个分支处理） */
 export interface PreviewEnvelope {
   readonly success: true
