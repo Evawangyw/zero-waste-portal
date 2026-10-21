@@ -17,6 +17,7 @@ import { TRACK_EVENTS } from './track.types.js'
 import type {
   AdminCountItem,
   AdminLibraryStats,
+  AdminRegistrationRow,
   AdminUserProfileStats,
   AdminVisitorRow,
   AsksSummary,
@@ -148,7 +149,19 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
       LIMIT ${STATS_TOP_LIMIT}
     `),
     loadCorpusIndexStatus(),
-    prisma.user.findMany({ select: { occupation: true, org: true, topics: true } }),
+    prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        occupation: true,
+        org: true,
+        topics: true,
+        isAdmin: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
   ])
 
   const events = toEventCounts(eventRows)
@@ -189,10 +202,19 @@ export async function buildStatsSummary(prisma: PrismaClient): Promise<StatsSumm
   }
 }
 
-/** 把注册资料收成岗位、领域、机构三组人数。空值单独成组，不丢用户。 */
-export function summarizeUserProfiles(
-  rows: readonly { readonly occupation: string; readonly org: string; readonly topics: string }[],
-): AdminUserProfileStats {
+interface ProfileSourceRow {
+  readonly id: string
+  readonly name: string
+  readonly phone: string
+  readonly occupation: string
+  readonly org: string
+  readonly topics: string
+  readonly isAdmin: boolean
+  readonly createdAt: Date
+}
+
+/** 把注册资料收成岗位、领域、机构三组人数，并保留每个用户一行。空值单独成组，不丢用户。 */
+export function summarizeUserProfiles(rows: readonly ProfileSourceRow[]): AdminUserProfileStats {
   const occupations = new Map<string, number>()
   const orgs = new Map<string, number>()
   const topics = new Map<string, number>()
@@ -208,6 +230,22 @@ export function summarizeUserProfiles(
     byOccupation: toCounts(occupations),
     byTopic: toCounts(topics),
     byOrg: toCounts(orgs),
+    users: rows.map((row) => toRegistrationRow(row)),
+  }
+}
+
+/** 管理页一行一个用户。领域是关注议题。不带密码。 */
+function toRegistrationRow(row: ProfileSourceRow): AdminRegistrationRow {
+  const createdAt = Number.isNaN(row.createdAt.getTime()) ? '' : row.createdAt.toISOString()
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    occupation: row.occupation,
+    org: row.org,
+    topics: parseTopics(row.topics),
+    isAdmin: row.isAdmin,
+    createdAt,
   }
 }
 

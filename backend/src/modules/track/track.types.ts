@@ -164,7 +164,10 @@ export interface StatsSummaryResponse {
    * 访客按登录账号或匿名会话计：当前库没有 IP 访问表。
    */
   readonly library: AdminLibraryStats
-  /** 注册时留下的岗位、领域和机构分布。不含姓名、手机号和密码。 */
+  /**
+   * 注册时留下的岗位、领域和机构分布，以及每个用户一行。
+   * users 只给管理统计：含姓名和手机号，不含密码。
+   */
   readonly profiles: AdminUserProfileStats
 }
 
@@ -174,12 +177,26 @@ export interface AdminCountItem {
   readonly count: number
 }
 
+/** 一个注册用户。领域是注册表单里的关注议题。不含密码。 */
+export interface AdminRegistrationRow {
+  readonly id: string
+  readonly name: string
+  readonly phone: string
+  readonly occupation: string
+  readonly org: string
+  readonly topics: readonly string[]
+  readonly isAdmin: boolean
+  readonly createdAt: string
+}
+
 /** 注册资料汇总。岗位是在所属机构担任的职务，领域取关注议题。 */
 export interface AdminUserProfileStats {
   readonly total: number
   readonly byOccupation: readonly AdminCountItem[]
   readonly byTopic: readonly AdminCountItem[]
   readonly byOrg: readonly AdminCountItem[]
+  /** 每个注册用户一行，供管理页展开。 */
+  readonly users: readonly AdminRegistrationRow[]
 }
 
 /** 复现包「知识库管理」顶部统计，映射到现有书架、用户、下载和对话 */

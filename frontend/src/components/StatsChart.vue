@@ -55,8 +55,13 @@ onMounted(() => {
     if (name !== '') emit('select', name)
   })
   render()
+  let seenWidth = host.value.clientWidth
   observer = new ResizeObserver(() => {
-    chart?.resize()
+    if (chart === null || host.value === null) return
+    const width = host.value.clientWidth
+    chart.resize()
+    if (seenWidth === 0 && width > 0) chart.setOption(props.option, true)
+    seenWidth = width
   })
   observer.observe(host.value)
 })

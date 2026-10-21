@@ -351,7 +351,7 @@ export interface StatsSummaryResponse {
   }
   /** 复现包管理后台顶部的规模统计，口径在后端 library 字段 */
   readonly library: AdminLibraryStats
-  /** 注册资料分布。岗位是在所属机构担任的职务，领域是关注议题。 */
+  /** 注册资料分布，以及每个用户一行。users 含姓名和手机号，不含密码。 */
   readonly profiles: AdminUserProfileStats
 }
 
@@ -360,11 +360,24 @@ export interface AdminCountItem {
   readonly count: number
 }
 
+/** 一个注册用户。领域是注册时的关注议题。不含密码。 */
+export interface AdminRegistrationRow {
+  readonly id: string
+  readonly name: string
+  readonly phone: string
+  readonly occupation: string
+  readonly org: string
+  readonly topics: readonly string[]
+  readonly isAdmin: boolean
+  readonly createdAt: string
+}
+
 export interface AdminUserProfileStats {
   readonly total: number
   readonly byOccupation: readonly AdminCountItem[]
   readonly byTopic: readonly AdminCountItem[]
   readonly byOrg: readonly AdminCountItem[]
+  readonly users: readonly AdminRegistrationRow[]
 }
 
 export interface ChunkDocumentItem {

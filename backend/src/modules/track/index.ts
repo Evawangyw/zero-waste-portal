@@ -52,6 +52,7 @@ export type {
   AdminCountItem,
   AdminIndexStatus,
   AdminLibraryStats,
+  AdminRegistrationRow,
   AdminUserProfileStats,
   AdminVisitorRow,
   AsksSummary,

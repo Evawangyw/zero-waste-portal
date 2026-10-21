@@ -117,6 +117,22 @@ const downloadChart = computed(() =>
 const askTermHeight = computed(() => chartHeight(summary.value?.topAskTerms.length ?? 0))
 const searchHeight = computed(() => heatmapHeight(summary.value?.topSearchTerms.length ?? 0))
 const downloadHeight = computed(() => Math.max(120, (summary.value?.topDownloads.length ?? 0) * 56))
+const askCountLine = computed(() => {
+  const [answered, missed, pending] = askSlices.value
+  if (answered === undefined || missed === undefined || pending === undefined) return ''
+  return `有答案 ${answered.value}，没有答案 ${missed.value}，还没判定 ${pending.value}`
+})
+const askTermRows = computed(() =>
+  (summary.value?.topAskTerms ?? []).map((row) => ({ term: row.term, count: row.count })),
+)
+const downloadRows = computed(() =>
+  (summary.value?.topDownloads ?? []).map((row) => ({
+    docId: row.docId,
+    title: downloadTitle(row.fileName),
+    count: row.count,
+  })),
+)
+const registrationRows = computed(() => [...(summary.value?.profiles.users ?? [])])
 
 const occupationRows = computed(() => summary.value?.profiles.byOccupation ?? [])
 const topicRows = computed(() => summary.value?.profiles.byTopic ?? [])
@@ -260,6 +276,15 @@ function docLink(docId: string): string {
   return `/doc/${docId}`
 }
 
+function profileText(value: string, empty: string): string {
+  const text = value.trim()
+  return text === '' ? empty : text
+}
+
+function topicText(topics: readonly string[]): string {
+  return topics.length === 0 ? '未选择' : topics.join('、')
+}
+
 function chartHeight(count: number): number {
   return Math.max(220, count * 36)
 }
@@ -343,6 +368,25 @@ function axisLabels(count: number): string[] {
   return Array.from({ length: count }, (_, index) => String(index))
 }
 
+/** 轴上只留短标题。全文放在提示和下面的表里，避免长句子把柱子挤出画布。 */
+function shortAxisLabel(text: string, labelWidth: number): string {
+  const max = Math.max(8, Math.floor(labelWidth / 14))
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+function readBarTip(
+  raw: unknown,
+  categories: readonly string[],
+): { readonly name: string; readonly value: number } {
+  const item = Array.isArray(raw) ? raw[0] : raw
+  if (typeof item !== 'object' || item === null) return { name: '', value: 0 }
+  const dataIndex = 'dataIndex' in item && typeof item.dataIndex === 'number' ? item.dataIndex : -1
+  const named = 'name' in item && typeof item.name === 'string' ? item.name : ''
+  const fromIndex = dataIndex >= 0 ? categories[dataIndex] : undefined
+  const value = 'value' in item && typeof item.value === 'number' ? item.value : 0
+  return { name: fromIndex ?? named, value }
+}
+
 function readHeatName(raw: unknown): string {
   if (typeof raw !== 'object' || raw === null || !('name' in raw)) return ''
   return typeof raw.name === 'string' ? raw.name : ''
@@ -378,21 +422,29 @@ function barOption(
   labelWidth = 160,
   overflow: 'truncate' | 'break' = 'truncate',
 ): EChartsCoreOption {
+  const axisNames = categories.map((name) => shortAxisLabel(name, labelWidth))
   return {
     color: [GREEN],
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter(raw: unknown): string {
+        const tip = readBarTip(raw, categories)
+        return tip.name === '' ? '' : `${tip.name}<br/>${tip.value} 次`
+      },
+    },
     grid: { left: 8, right: 16, top: 12, bottom: 8, containLabel: true },
     xAxis: horizontal
       ? { type: 'value', min: 0, minInterval: 1, axisLabel: { color: INK } }
       : {
           type: 'category',
-          data: categories,
+          data: axisNames,
           axisLabel: { color: INK, interval: 0 },
         },
     yAxis: horizontal
       ? {
           type: 'category',
-          data: categories,
+          data: axisNames,
           axisLabel: { color: INK, width: labelWidth, overflow, lineHeight: 16 },
         }
       : { type: 'value', min: 0, minInterval: 1, axisLabel: { color: INK } },
@@ -747,20 +799,40 @@ onUnmounted(() => {
             按注册资料汇总，共 {{ summary.profiles.total }} 人。岗位是在所属机构担任的职务，领域取关注议题。一人可以选多个议题，领域各组人数加起来可以大于注册人数。
           </p>
           <el-empty v-if="summary.profiles.total === 0" description="还没有注册用户" />
-          <el-row v-else :gutter="16">
-            <el-col :xs="24" :md="8">
-              <h3 class="sub-title">岗位</h3>
-              <StatsChart :option="occupationChart" :height="chartHeight(occupationRows.length)" />
-            </el-col>
-            <el-col :xs="24" :md="8">
-              <h3 class="sub-title">领域</h3>
-              <StatsChart :option="topicChart" :height="chartHeight(topicRows.length)" />
-            </el-col>
-            <el-col :xs="24" :md="8">
-              <h3 class="sub-title">所属机构</h3>
-              <StatsChart :option="orgChart" :height="chartHeight(orgRows.length)" />
-            </el-col>
-          </el-row>
+          <template v-else>
+            <el-row :gutter="16">
+              <el-col :xs="24" :md="8">
+                <h3 class="sub-title">岗位</h3>
+                <StatsChart :option="occupationChart" :height="chartHeight(occupationRows.length)" />
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <h3 class="sub-title">领域</h3>
+                <StatsChart :option="topicChart" :height="chartHeight(topicRows.length)" />
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <h3 class="sub-title">所属机构</h3>
+                <StatsChart :option="orgChart" :height="chartHeight(orgRows.length)" />
+              </el-col>
+            </el-row>
+            <h3 class="sub-title user-table-title">注册用户</h3>
+            <p class="metric-note visit-note">展开一行查看岗位、领域和机构。领域是注册时选的关注议题。手机号只在这个管理页显示。</p>
+            <el-table :data="registrationRows" row-key="id" size="small" empty-text="还没有注册用户">
+              <el-table-column type="expand">
+                <template #default="{ row }">
+                  <div class="reg-expand">
+                    <div><span>岗位</span><b>{{ profileText(row.occupation, '未填写') }}</b></div>
+                    <div><span>领域</span><b>{{ topicText(row.topics) }}</b></div>
+                    <div><span>机构</span><b>{{ profileText(row.org, '未填写') }}</b></div>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="name" label="姓名" min-width="120" />
+              <el-table-column prop="phone" label="手机号" min-width="140" />
+              <el-table-column label="注册时间" min-width="170">
+                <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+              </el-table-column>
+            </el-table>
+          </template>
         </el-card>
 
         <el-card shadow="never" class="block">
@@ -816,7 +888,10 @@ onUnmounted(() => {
           <el-col :xs="24" :md="10">
             <el-card shadow="never" class="block">
               <template #header><span class="block-title">提问结果</span></template>
-              <StatsChart v-if="hasAsks" :option="askChart" />
+              <template v-if="hasAsks">
+                <p class="metric-note visit-note">{{ askCountLine }}。按已回写的回答判定，没有回答正文的记为还没判定。</p>
+                <StatsChart :option="askChart" />
+              </template>
               <el-empty v-else description="还没有人提问" />
             </el-card>
           </el-col>
@@ -824,11 +899,13 @@ onUnmounted(() => {
 
         <el-card shadow="never" class="block">
           <template #header><span class="block-title">高频提问</span></template>
-          <StatsChart
-            v-if="(summary.topAskTerms?.length ?? 0) > 0"
-            :option="askTermChart"
-            :height="askTermHeight"
-          />
+          <template v-if="askTermRows.length > 0">
+            <el-table :data="askTermRows" size="small" empty-text="还没有提问">
+              <el-table-column prop="term" label="提问" min-width="240" />
+              <el-table-column prop="count" label="次数" width="80" />
+            </el-table>
+            <StatsChart :option="askTermChart" :height="askTermHeight" />
+          </template>
           <el-empty v-else description="还没有提问" />
         </el-card>
 
@@ -848,12 +925,17 @@ onUnmounted(() => {
           <el-col :xs="24" :md="12">
             <el-card shadow="never" class="block">
               <template #header><span class="block-title">下载最多</span></template>
-              <StatsChart
-                v-if="summary.topDownloads.length > 0"
-                :option="downloadChart"
-                :height="downloadHeight"
-                @select="openDownload"
-              />
+              <template v-if="downloadRows.length > 0">
+                <el-table :data="downloadRows" size="small" empty-text="还没有下载">
+                  <el-table-column label="资料" min-width="180">
+                    <template #default="{ row }">
+                      <el-button link type="primary" @click="openDownload(row.title)">{{ row.title }}</el-button>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="count" label="次数" width="80" />
+                </el-table>
+                <StatsChart :option="downloadChart" :height="downloadHeight" @select="openDownload" />
+              </template>
               <el-empty v-else description="还没有下载" />
             </el-card>
           </el-col>
@@ -1030,6 +1112,27 @@ onUnmounted(() => {
 
 .visit-note {
   margin: 8px 0 12px;
+}
+
+.user-table-title {
+  margin-top: 8px;
+}
+
+.reg-expand {
+  display: grid;
+  gap: 8px;
+  padding: 4px 8px 8px 48px;
+}
+
+.reg-expand div {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.reg-expand span {
+  color: var(--el-text-color-secondary);
 }
 
 </style>
