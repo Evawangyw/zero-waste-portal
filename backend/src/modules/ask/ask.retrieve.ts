@@ -1,5 +1,6 @@
 // 词法召回和向量召回按名次融合，再交给抽取式回答。向量索引未完成时先只用词法。
 import { getPrisma } from '../../db/prisma.js'
+import { isOutlineQuery, outlineSubject, supplementOutlineHits, titleHasOutlineSubject } from './ask.extract.js'
 import type { ExtractHit } from './ask.extract.js'
 import { BM25Index } from './ask.bm25.js'
 import type { CorpusChunk } from './ask.corpus.js'
@@ -118,16 +119,43 @@ async function search(engine: Engine, query: string): Promise<RetrieveResult> {
       score: item.score,
       customMetadataText: metaText(chunk),
       channel: vectorOnly.has(item.id) ? 'vector' : 'lexical',
+      chunkId: chunk.chunkId,
     })
   }
   return {
-    hits,
+    hits: expandOutline(query, hits, engine),
     lexicalCount: lexical.length,
     vectorCount: vector.length,
     vectorReady: engine.vectorReady,
     vectorDone: engine.vectorDone,
     vectorTotal: engine.vectorTotal,
   }
+}
+
+/** 问目录时，把同一文档里没进前 40 的目录片段接上。后面的片段往往不再重复法规名，单靠问句打分进不来。 */
+function expandOutline(query: string, hits: readonly ExtractHit[], engine: Engine): ExtractHit[] {
+  if (!isOutlineQuery(query)) return [...hits]
+  const subject = outlineSubject(query)
+  let best: ExtractHit | undefined
+  for (const hit of hits) {
+    if (!titleHasOutlineSubject(hit.title, subject)) continue
+    if (best === undefined || hit.score > best.score) best = hit
+  }
+  if (best === undefined) return [...hits]
+  const matched = best
+  const extras: ExtractHit[] = []
+  for (const chunk of engine.chunks) {
+    if (String(chunk.documentId) !== matched.knowledgeId) continue
+    extras.push({
+      knowledgeId: matched.knowledgeId,
+      title: chunk.title,
+      content: chunk.content,
+      score: 0,
+      customMetadataText: metaText(chunk),
+      chunkId: chunk.chunkId,
+    })
+  }
+  return supplementOutlineHits(query, hits, extras)
 }
 
 /** 已下架的资料编号。每次提问现查，下架立刻从回答里消失。 */

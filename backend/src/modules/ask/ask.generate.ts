@@ -15,6 +15,7 @@ const SYSTEM_PROMPT = [
   EMPTY_NOTICE,
   '3. 能回答时用简洁中文。每个事实句末标注资料编号，格式为 [[1]]。编号只能来自资料里已有的编号。',
   '4. 不要输出“参考来源”，不要输出 @@sources@@，不要输出思考过程。',
+  '5. 问题里的名称和资料标题相差几个字，或用了简称时，仍按该资料回答，并使用资料里的正式名称。',
 ].join('\n')
 
 export interface GenerateDecision {

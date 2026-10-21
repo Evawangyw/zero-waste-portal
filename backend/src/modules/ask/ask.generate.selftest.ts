@@ -47,6 +47,7 @@ async function main(): Promise<void> {
     const user = messages[1]?.content ?? ''
     check('系统提示要求答不了就说库内没有依据', system.includes('未检索到与该问题直接相关'), failed)
     check('系统提示禁止用资料以外的知识', system.includes('不要使用资料以外的知识'), failed)
+    check('名称差几个字时仍按资料正式名称回答', system.includes('正式名称'), failed)
     check('用户消息带上问题和资料', user.includes('今天天气怎么样') && user.includes('生活垃圾分类'), failed)
     check('提示词里没有密钥', !system.includes('sk-') && !user.includes('sk-'), failed)
   }

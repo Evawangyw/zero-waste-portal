@@ -1,5 +1,5 @@
 // 验收：抽取式回答贴原文、相近国标不因共有「实施」被写进来、问到某地时丢掉别的省市。
-import { composeExtractiveAnswer } from './ask.extract.js'
+import { composeExtractiveAnswer, supplementOutlineHits } from './ask.extract.js'
 import type { ExtractHit } from './ask.extract.js'
 
 function check(name: string, ok: boolean, failed: { n: number }): void {
@@ -74,6 +74,49 @@ function main(): void {
     vectorOnly.answer.includes('湿垃圾应破袋后投入收集容器'),
     failed,
   )
+
+  const tocQuery = '中华人民共和国生态环境法里面有哪些章节'
+  const tocHead = hit({
+    knowledgeId: 'code',
+    title: '中华人民共和国生态环境法典',
+    chunkId: 1,
+    score: 0.2,
+    customMetadataText: '知识类型: 政策法规',
+    content:
+      '## 中华人民共和国生态环境法典\n目录\n第一编 总则\n第一章 基本规定\n第二章 监督管理\n第一分编通则\n第三章 规划和生态环境分区管控',
+  })
+  const tocRest = hit({
+    knowledgeId: 'code',
+    title: '中华人民共和国生态环境法典',
+    chunkId: 2,
+    content:
+      '第四章 标准和监测\n第五章 生态环境影响评价\n第六章 生态保护补偿\n第七章 突发生态环境事件应对\n第八章 保障措施\n第九章 信息公开与公众参与\n第二编 污染防治',
+  })
+  const tocTail = hit({
+    knowledgeId: 'code',
+    title: '中华人民共和国生态环境法典',
+    chunkId: 3,
+    content: '第三章 附则\n第一编 总则\n第一章 基本规定\n第一条 为了保护生态环境，制定本法。',
+  })
+  const otherCode = hit({
+    knowledgeId: 'other',
+    title: '生活垃圾分类条例',
+    chunkId: 9,
+    score: 0.9,
+    content: '第一章 总则\n第二章 规划\n第三章 监督\n第四章 责任\n应当依法分类投放生活垃圾。',
+  })
+  const supplemented = supplementOutlineHits(tocQuery, [tocHead, otherCode], [tocHead, tocRest, tocTail])
+  const chapters = composeExtractiveAnswer(tocQuery, supplemented)
+  check('问章节时补上没被召回的后半目录', chapters.answer.includes('第九章 信息公开与公众参与'), failed)
+  check('问章节时保留编名', chapters.answer.includes('第一编 总则') && chapters.answer.includes('第二编 污染防治'), failed)
+  check('问章节时保留没有空格的分编', chapters.answer.includes('第一分编通则'), failed)
+  check('问章节时保留紧贴条文之前的附则', chapters.answer.includes('第三章 附则'), failed)
+  check('问章节时不把正文第一条写进目录', !chapters.answer.includes('制定本法'), failed)
+  check('问章节时不混入另一部资料', !chapters.answer.includes('分类投放'), failed)
+  check('问章节时用来源里的正式名称', chapters.answer.includes('生态环境法典'), failed)
+
+  const untouched = supplementOutlineHits('今天天气怎么样', [tocHead], [tocHead, tocRest])
+  check('不是问目录时不改写命中', untouched.length === 1 && untouched[0]?.content === tocHead.content, failed)
 
   const none = composeExtractiveAnswer('完全无关的问题', [])
   check('没有命中时说明库内没有依据', none.mode === 'empty' && none.answer.includes('未检索到'), failed)

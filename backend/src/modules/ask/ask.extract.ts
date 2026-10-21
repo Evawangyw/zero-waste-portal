@@ -1,5 +1,6 @@
 // 契约（ask 模块内）：把融合后的检索片段抽成带 [[n]] 的原文回答。
 // 不调用对话模型。词法命中的句子按字面重合来取；向量单独召回的片段另留少量原句。
+// 问「有哪些章节 / 目录」时，改从命中文档的目录片段按原文顺序取编、章，不再要求每一行都重复法规名称。
 // 回答末尾的 @@sources@@ 与前端 readExtractiveAnswer 是同一标记，改一边必须改另一边。
 
 export const EXTRACT_SOURCE_MARK = '@@sources@@'
@@ -12,6 +13,8 @@ export interface ExtractHit {
   readonly customMetadataText: string
   /** 缺省按词法命中处理。向量单独召回的片段允许在没有共同字面时留下少量原句。 */
   readonly channel?: 'lexical' | 'vector'
+  /** 语料切片编号。目录补全靠它把同一文档的目录片段按原文顺序接上。 */
+  readonly chunkId?: number
 }
 
 export interface ExtractiveSource {
@@ -164,6 +167,9 @@ const VECTOR_PER_DOC = 2
 const VECTOR_GLOBAL = 4
 const DOC_CUTOFF = 0.22
 const SENTENCE_CUTOFF = 0.45
+const MAX_OUTLINE_LINES = 80
+const OUTLINE_HEADING = /^第[零〇一二三四五六七八九十百千0-9]+(?:分编|编|章)/
+const ARTICLE_HEADING = /^第[零〇一二三四五六七八九十百千0-9]+条/
 
 interface DocMeta {
   readonly year: string
@@ -205,7 +211,7 @@ export function composeExtractiveAnswer(
   const docs = rankDocs(hits, queryGeo, cores)
   if (docs.length === 0) return emptyAnswer(EMPTY_NOTICE)
 
-  const sentences = pickSentences(docs, strong, queryGeo)
+  const sentences = pickOutline(docs, q) ?? pickSentences(docs, strong, queryGeo)
   if (sentences.length === 0) return emptyAnswer(WEAK_NOTICE)
 
   const sources: ExtractiveSource[] = []
@@ -246,6 +252,146 @@ export function formatSourceAppendix(sources: readonly ExtractiveSource[]): stri
 
 function emptyAnswer(notice: string): ExtractiveAnswer {
   return { answer: notice, mode: 'empty', sources: [] }
+}
+
+/** 问题是在要一部资料的目录，而不是在问某一条怎么规定。 */
+export function isOutlineQuery(query: string): boolean {
+  return /哪些章|章节有哪|的目录|有几章|有几编|分几编|篇章结构/.test(query)
+}
+
+/** 去掉「有哪些章节」这类问法，留下资料名称。短于 4 个字时不当成名称。 */
+export function outlineSubject(query: string): string {
+  return query
+    .replace(/请问|一下|里面|其中|关于|有哪些|哪些|什么|怎么|如何|目录|章节|篇章|结构|包括|有几编|有几章|分几编|分别是|是什么/g, '')
+    .replace(/[的有里吗呢啊吧？?，,。\s]/g, '')
+}
+
+export function titleHasOutlineSubject(title: string, subject: string): boolean {
+  return subject.length >= 4 && cleanTitle(title).includes(subject)
+}
+
+/** 这一片段是目录：编/章标题密集，而且没有条文。 */
+export function isOutlineChunk(content: string): boolean {
+  let headings = 0
+  let articles = 0
+  for (const line of plainLines(content)) {
+    if (isOutlineHeading(line)) headings += 1
+    else if (ARTICLE_HEADING.test(line)) articles += 1
+  }
+  return headings >= 4 && articles === 0
+}
+
+/**
+ * 问目录时，把同一文档的目录片段按切片顺序合成一条，放到命中结果最前面。
+ * sameDocument 只需要这部文档的切片；其他文档的命中原样保留。
+ */
+export function supplementOutlineHits(
+  query: string,
+  hits: readonly ExtractHit[],
+  sameDocument: readonly ExtractHit[],
+): ExtractHit[] {
+  if (!isOutlineQuery(query)) return [...hits]
+  const subject = outlineSubject(query)
+  let best: ExtractHit | undefined
+  for (const hit of hits) {
+    if (!titleHasOutlineSubject(hit.title, subject)) continue
+    if (best === undefined || hit.score > best.score) best = hit
+  }
+  if (best === undefined) return [...hits]
+  const matched = best
+  const outline = sameDocument
+    .filter((hit) => hit.knowledgeId === matched.knowledgeId && isOutlineChunk(hit.content))
+    .sort((left, right) => (left.chunkId ?? 0) - (right.chunkId ?? 0))
+  if (outline.length === 0) return [...hits]
+  const covered = new Set(
+    outline.map((hit) => hit.chunkId).filter((id): id is number => id !== undefined),
+  )
+  const tail = outlineTail(sameDocument, outline)
+  const body = outline.map((hit) => hit.content).join('\n')
+  const synthetic: ExtractHit = {
+    knowledgeId: matched.knowledgeId,
+    title: matched.title,
+    content: tail === '' ? body : `${body}\n${tail}`,
+    score: matched.score + 1,
+    customMetadataText: matched.customMetadataText,
+    channel: 'lexical',
+  }
+  const rest = hits.filter((hit) => hit.chunkId === undefined || !covered.has(hit.chunkId))
+  return [synthetic, ...rest]
+}
+
+/** 目录最后一片常常把「附则」和正文第一条切在一起。第一条之前的标题仍算目录。 */
+function outlineTail(all: readonly ExtractHit[], outline: readonly ExtractHit[]): string {
+  const last = outline[outline.length - 1]
+  if (last === undefined || last.chunkId === undefined) return ''
+  const lastId = last.chunkId
+  const next = all
+    .filter((hit) => hit.knowledgeId === last.knowledgeId && (hit.chunkId ?? -1) > lastId)
+    .sort((left, right) => (left.chunkId ?? 0) - (right.chunkId ?? 0))[0]
+  if (next === undefined) return ''
+  const lines: string[] = []
+  for (const line of plainLines(next.content)) {
+    if (ARTICLE_HEADING.test(line)) break
+    lines.push(line)
+  }
+  return lines.join('\n')
+}
+
+function pickOutline(docs: readonly DocBucket[], query: string): ScoredSentence[] | null {
+  if (!isOutlineQuery(query)) return null
+  const subject = outlineSubject(query)
+  const doc = docs.find((item) => titleHasOutlineSubject(item.title, subject))
+  if (doc === undefined) return null
+  const chunks = [...doc.chunks, ...doc.vectorChunks].filter((chunk) => isOutlineChunk(chunk))
+  if (chunks.length === 0) return null
+  const richest = chunks.reduce((best, chunk) =>
+    outlineHeadingCount(chunk) > outlineHeadingCount(best) ? chunk : best,
+  )
+  const richestCount = outlineHeadingCount(richest)
+  const total = chunks.reduce((sum, chunk) => sum + outlineHeadingCount(chunk), 0)
+  const source = richestCount >= total - richestCount ? [richest] : chunks
+  const lines: string[] = []
+  if (doc.title !== '') lines.push(doc.title)
+  const seenCatalog = source.some((chunk) => plainLines(chunk).some((line) => line === '目录'))
+  if (seenCatalog) lines.push('目录')
+  let done = false
+  for (const chunk of source) {
+    if (done) break
+    for (const line of plainLines(chunk)) {
+      if (!isOutlineHeading(line)) continue
+      if (lines[lines.length - 1] === line) continue
+      // 正文又从第一编开始。目录里同一编名只出现一次，再见到就停。
+      if (/^第[零〇一二三四五六七八九十百千0-9]+编/.test(line) && lines.includes(line)) {
+        done = true
+        break
+      }
+      lines.push(line)
+      if (lines.length >= MAX_OUTLINE_LINES) done = true
+      if (done) break
+    }
+  }
+  if (lines.length < 5) return null
+  return lines.map((text) => ({ text, score: 1, doc, vectorOnly: false }))
+}
+
+function outlineHeadingCount(content: string): number {
+  let count = 0
+  for (const line of plainLines(content)) {
+    if (isOutlineHeading(line)) count += 1
+  }
+  return count
+}
+
+function isOutlineHeading(line: string): boolean {
+  return line.length <= 48 && OUTLINE_HEADING.test(line)
+}
+
+function plainLines(content: string): string[] {
+  return content
+    .replace(/<[^>]+>/g, ' ')
+    .split(/\n+/)
+    .map((line) => line.replace(/^#{1,6}\s+/, '').replace(/\s+/g, ' ').trim())
+    .filter((line) => line !== '')
 }
 
 function rankDocs(
