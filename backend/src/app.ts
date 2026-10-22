@@ -8,6 +8,7 @@ import { docsRouter, fileRouter, listingRouter, shelfRouter, uploadRouter } from
 import { embedRouter } from './modules/embed/index.js'
 import { healthRouter } from './modules/health/index.js'
 import { settingsRouter } from './modules/settings/index.js'
+import { feedbackRouter } from './modules/feedback/index.js'
 import { trackRouter } from './modules/track/index.js'
 import { jsonErrorHandler } from './middleware/json-error.handler.js'
 
@@ -59,6 +60,12 @@ export function createApp(): Express {
   // 路径与前面所有路由不重叠，挂在最后即可；不改任何既有模块的行为。
   app.use(trackRouter)
   app.use(settingsRouter)
+
+  // 问题反馈：公众提交分类 + 描述，管理员在管理区查看。
+  //   POST  /api/feedback            提交（可匿名；带了登录态就记下是谁）
+  //   GET   /api/admin/feedback      列表（管理员）
+  //   PATCH /api/admin/feedback/:id  标为未处理 / 已处理（管理员）
+  app.use(feedbackRouter)
 
   // 管理员单独上传一份资料到书架。只接受已登录的管理员。
   app.use(uploadRouter)

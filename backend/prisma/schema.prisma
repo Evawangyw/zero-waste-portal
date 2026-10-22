@@ -39,6 +39,7 @@ model User {
   submissions  Submission[]
   chatMessages ChatMessage[]
   chatConversations ChatConversation[]
+  feedbacks    Feedback[]
 
   @@map("users")
 }
@@ -154,6 +155,26 @@ model EventLog {
   @@map("event_logs")
 }
 
+/// 用户从页面右下角提交的问题反馈。管理员在「问题反馈」页查看。
+/// 分类键见 feedback.types.ts。status：open=未处理，done=已处理。
+model Feedback {
+  id          String   @id @default(cuid())
+  category    String
+  description String
+  /// 提交时所在页面（路由 fullPath）
+  pagePath    String   @default("")
+  status      String   @default("open")
+  /// 未登录也可提交，此时为空
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([status])
+  @@map("feedbacks")
+}
+
 /// 公众提交的资料（P2：状态「待审核」，通过后由管理员手动在 WeKnora 后台入库）
 /// 状态取值：pending=待审核，approved=通过，rejected=驳回
 model Submission {
@@ -235,6 +256,6 @@ model KnowledgeIndex {
 }
 
 // 关系说明：
-// - User 1—N QuestionLog / DownloadLog / Submission
+// - User 1—N QuestionLog / DownloadLog / Submission / Feedback
 // - 三张日志表都用 onDelete 语义：删用户时日志保留（SetNull）或级联清理（DownloadLog）
 // - KnowledgeIndex 与 User 无关系：纯 WeKnora 侧镜像表（独立落库、独立清理）

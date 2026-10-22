@@ -448,7 +448,10 @@ onUnmounted(() => {
             <el-card shadow="never" class="metric-card">
               <div class="metric-value">{{ summary.library.pendingSubmissions }}</div>
               <div class="metric-label">待审核资料</div>
-              <div class="metric-note">反馈提交 {{ summary.library.feedbackEvents }} 次</div>
+              <div class="metric-note">
+                反馈提交 {{ summary.library.feedbackEvents }} 次，
+                <router-link class="metric-link" to="/admin/feedback">打开问题反馈</router-link>
+              </div>
             </el-card>
           </el-col>
         </el-row>
@@ -726,6 +729,11 @@ onUnmounted(() => {
   margin-top: 4px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.metric-link {
+  color: var(--forest);
+  text-decoration: none;
 }
 
 .kv-grid {

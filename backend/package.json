@@ -27,6 +27,7 @@
     "test:ask-history": "tsx src/modules/ask/ask.history.selftest.ts",
     "test:profile": "tsx src/modules/auth/auth.profile.selftest.ts",
     "test:settings": "tsx src/modules/settings/settings.selftest.ts",
+    "test:feedback": "tsx src/modules/feedback/feedback.selftest.ts",
     "test:ask-extract": "tsx src/modules/ask/ask.extract.selftest.ts",
     "test:ask-generate": "tsx src/modules/ask/ask.generate.selftest.ts",
     "test:ask-retrieve": "tsx src/modules/ask/ask.retrieve.selftest.ts",

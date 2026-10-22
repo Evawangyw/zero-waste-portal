@@ -15,6 +15,7 @@ import AdminShell from '../views/admin/AdminShell.vue'
 import AdminDocsView from '../views/admin/AdminDocsView.vue'
 import AdminUsersView from '../views/admin/AdminUsersView.vue'
 import AdminSettingsView from '../views/admin/AdminSettingsView.vue'
+import AdminFeedbackView from '../views/admin/AdminFeedbackView.vue'
 import AdminStatsView from '../views/AdminStatsView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
@@ -90,6 +91,12 @@ const routes: readonly RouteRecordRaw[] = [
         name: 'admin-stats',
         component: AdminStatsView,
         meta: { title: '数据看板' },
+      },
+      {
+        path: 'feedback',
+        name: 'admin-feedback',
+        component: AdminFeedbackView,
+        meta: { title: '问题反馈' },
       },
       {
         path: 'settings',

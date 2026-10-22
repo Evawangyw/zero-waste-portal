@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 管理区外壳：左侧四个子页。未登录和非管理员停在提示页，不跳走。
+// 管理区外壳：左侧五个子页。未登录和非管理员停在提示页，不跳走。
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { currentUser, isLoggedIn, restoreAuth } from '../../composables/useAuth'
@@ -16,6 +16,7 @@ const items = [
   { to: '/admin/docs', title: '资料管理', note: '上传、上下架与导出' },
   { to: '/admin/users', title: '注册信息', note: '谁在用这个站' },
   { to: '/admin/stats', title: '数据看板', note: '访问与使用明细' },
+  { to: '/admin/feedback', title: '问题反馈', note: '用户提交的问题' },
   { to: '/admin/settings', title: '系统设置', note: '问答模型和用户权限' },
 ] as const
 

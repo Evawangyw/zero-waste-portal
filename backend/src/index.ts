@@ -2,6 +2,7 @@
 // 默认端口 4000，可用 PORT 覆盖。
 import { createApp } from './app.js'
 import { loadConfig } from './config/index.js'
+import { ensureFeedbackTable } from './modules/feedback/index.js'
 import { ensureSiteSettings } from './modules/settings/index.js'
 
 const config = loadConfig()
@@ -11,6 +12,7 @@ void start()
 
 async function start(): Promise<void> {
   await ensureSiteSettings()
+  await ensureFeedbackTable()
   app.listen(config.port, () => {
     console.log(
       `[zero-waste-backend] listening on http://localhost:${config.port} (env=${config.nodeEnv})`,

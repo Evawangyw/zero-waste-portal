@@ -2,6 +2,7 @@
 // 应用外壳：导航条 + 路由出口。问答在 AI 助手页本机完成。
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import FeedbackWidget from './components/FeedbackWidget.vue'
 import SiteNav from './components/SiteNav.vue'
 import { currentUser, isLoggedIn, restoreAuth } from './composables/useAuth'
 import { APP_NAME } from './constants'
@@ -35,6 +36,7 @@ watch(isLoggedIn, (loggedIn) => {
     <el-main class="app-main" :class="{ 'app-main-bare': bare, 'app-main-ask': askPage, 'app-main-admin': adminPage }">
       <router-view />
     </el-main>
+    <FeedbackWidget v-if="!bare" />
     <el-footer v-if="!bare && !askPage" class="app-footer" height="auto">
       <div class="footer-inner">
         <div>
