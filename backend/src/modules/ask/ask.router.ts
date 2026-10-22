@@ -104,8 +104,9 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
       content: thinkingLine(retrieved, decision.action),
     })
   }
-  if (decision.action === 'refuse') {
-    writeSse(res, { type: 'answer', content: decision.notice })
+  if (decision.action === 'refuse' || decision.action === 'direct') {
+    const content = decision.action === 'refuse' ? decision.notice : decision.answer
+    writeSse(res, { type: 'answer', content })
     writeSse(res, { type: 'done', content: '' })
     res.end()
     return
@@ -139,12 +140,14 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
 
 function thinkingLine(
   retrieved: { vectorReady: boolean; lexicalCount: number; vectorCount: number; hits: readonly unknown[] },
-  action: 'generate' | 'refuse',
+  action: 'generate' | 'refuse' | 'direct',
 ): string {
   const counts = retrieved.vectorReady
     ? `词法召回 ${retrieved.lexicalCount} 条，向量召回 ${retrieved.vectorCount} 条，融合后 ${retrieved.hits.length} 个片段。`
     : `向量索引还在构建，本次词法召回 ${retrieved.lexicalCount} 条。`
-  return action === 'refuse' ? `${counts}没有可引用的原文，不调用模型。` : `${counts}只根据这些资料生成回答。`
+  if (action === 'refuse') return `${counts}没有可引用的原文，不调用模型。`
+  if (action === 'direct') return `${counts}按资料中的目录直接列出。`
+  return `${counts}只根据这些资料生成回答。`
 }
 
 /** 每条事件按 SSE 规范写成 `data: {json}\n\n`（curl -N 能实时看到） */

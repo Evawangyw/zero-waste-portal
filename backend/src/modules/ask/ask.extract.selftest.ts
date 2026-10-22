@@ -114,6 +114,7 @@ function main(): void {
   check('问章节时不把正文第一条写进目录', !chapters.answer.includes('制定本法'), failed)
   check('问章节时不混入另一部资料', !chapters.answer.includes('分类投放'), failed)
   check('问章节时用来源里的正式名称', chapters.answer.includes('生态环境法典'), failed)
+  check('问章节时标记为目录，交给上层直接列出', chapters.mode === 'outline', failed)
 
   const untouched = supplementOutlineHits('今天天气怎么样', [tocHead], [tocHead, tocRest])
   check('不是问目录时不改写命中', untouched.length === 1 && untouched[0]?.content === tocHead.content, failed)

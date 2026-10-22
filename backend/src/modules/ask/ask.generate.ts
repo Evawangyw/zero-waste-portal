@@ -29,15 +29,21 @@ export interface RefuseDecision {
   readonly notice: string
 }
 
-export type GroundingDecision = GenerateDecision | RefuseDecision
+export interface DirectDecision {
+  readonly action: 'direct'
+  readonly answer: string
+}
+
+export type GroundingDecision = GenerateDecision | RefuseDecision | DirectDecision
 
 export interface ChatMessage {
   readonly role: 'system' | 'user'
   readonly content: string
 }
 
-/** 抽取结果为空，或抽不出可引用句子时，不调用模型。 */
+/** 抽取结果为空，或抽不出可引用句子时，不调用模型。目录已经是原文，直接列出，避免模型把简称判成无法回答。 */
 export function decideGrounding(composed: ExtractiveAnswer): GroundingDecision {
+  if (composed.mode === 'outline') return { action: 'direct', answer: composed.answer }
   if (composed.mode === 'empty' || composed.sources.length === 0) {
     return { action: 'refuse', notice: composed.mode === 'empty' ? composed.answer : EMPTY_NOTICE }
   }

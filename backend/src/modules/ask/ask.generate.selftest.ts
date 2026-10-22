@@ -31,6 +31,22 @@ async function main(): Promise<void> {
   const weather = decideGrounding(composeExtractiveAnswer('今天天气怎么样', []))
   check('天气问题没有命中时不生成', weather.action === 'refuse' && weather.notice.includes('未检索到'), failed)
 
+  const catalog = decideGrounding(
+    composeExtractiveAnswer('生态环境法有哪些章节', [
+      hit({
+        knowledgeId: 'code',
+        title: '中华人民共和国生态环境法典',
+        content:
+          '中华人民共和国生态环境法典\n目录\n第一编 总则\n第一章 基本规定\n第二章 监督管理\n第三章 规划和生态环境分区管控\n第四章 标准和监测',
+      }),
+    ]),
+  )
+  check(
+    '目录问题直接列出原文，不调用模型',
+    catalog.action === 'direct' && catalog.answer.includes('第一章 基本规定') && catalog.answer.includes('@@sources@@'),
+    failed,
+  )
+
   const composed = composeExtractiveAnswer('上海生活垃圾怎么分类？', [
     hit({
       knowledgeId: 'sh',

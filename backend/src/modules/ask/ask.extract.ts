@@ -28,7 +28,7 @@ export interface ExtractiveSource {
 
 export interface ExtractiveAnswer {
   readonly answer: string
-  readonly mode: 'extractive' | 'empty'
+  readonly mode: 'extractive' | 'outline' | 'empty'
   readonly sources: readonly ExtractiveSource[]
 }
 
@@ -211,7 +211,8 @@ export function composeExtractiveAnswer(
   const docs = rankDocs(hits, queryGeo, cores)
   if (docs.length === 0) return emptyAnswer(EMPTY_NOTICE)
 
-  const sentences = pickOutline(docs, q) ?? pickSentences(docs, strong, queryGeo)
+  const outlined = pickOutline(docs, q)
+  const sentences = outlined ?? pickSentences(docs, strong, queryGeo)
   if (sentences.length === 0) return emptyAnswer(WEAK_NOTICE)
 
   const sources: ExtractiveSource[] = []
@@ -235,7 +236,7 @@ export function composeExtractiveAnswer(
   }
 
   const answer = `${lines.join('\n\n')}${formatSourceAppendix(sources)}`
-  return { answer, mode: 'extractive', sources }
+  return { answer, mode: outlined === null ? 'extractive' : 'outline', sources }
 }
 
 /** 回答末尾的来源列表。前端靠 @@sources@@ 画卡片，生成式回答也接这一段。 */
