@@ -5,12 +5,9 @@ import type { ExtractHit } from './ask.extract.js'
 import { BM25Index } from './ask.bm25.js'
 import type { CorpusChunk } from './ask.corpus.js'
 import { loadCorpus } from './ask.corpus.js'
-import { buildVectorMatrix, embedTexts, loadVectorMatrix, queryText, searchVectors } from './ask.embed.js'
+import { buildVectorMatrix, embedTexts, loadVectorMatrix, queryText, readVectorIndexModel, searchVectors } from './ask.embed.js'
+import { peekAskSettings } from '../settings/settings.store.js'
 import { fuseRanks } from './ask.fusion.js'
-
-const LEXICAL_K = 80
-const VECTOR_K = 80
-const FUSED_K = 40
 
 export interface RetrieveResult {
   readonly hits: readonly ExtractHit[]
@@ -70,8 +67,15 @@ async function openEngine(): Promise<Engine> {
     vectorDone: cached === null ? 0 : chunks.length,
     vectorTotal: chunks.length,
   }
-  if (!engine.vectorReady) void warmVectors(engine)
-  else console.log(`[ask] 已载入语料 ${chunks.length} 条，向量索引就绪`)
+  if (!engine.vectorReady) {
+    const indexed = readVectorIndexModel()
+    const wanted = peekAskSettings().vectorModel
+    if (indexed !== null && indexed !== wanted) {
+      console.log(`[ask] 向量索引是 ${indexed}，当前设置是 ${wanted}，暂不重建，本次只用词法召回`)
+    } else {
+      void warmVectors(engine)
+    }
+  } else console.log(`[ask] 已载入语料 ${chunks.length} 条，向量索引就绪`)
   return engine
 }
 
@@ -97,17 +101,24 @@ async function search(engine: Engine, query: string): Promise<RetrieveResult> {
     const chunk = engine.byId.get(id)
     return chunk !== undefined && !unlisted.has(String(chunk.documentId))
   }
-  const lexical = engine.bm25.search(query, LEXICAL_K).filter((hit) => listedChunk(hit.id))
+  const limits = peekAskSettings()
+  const lexical = engine.bm25.search(query, limits.lexicalK).filter((hit) => listedChunk(hit.id))
   const lexicalIds = new Set(lexical.map((hit) => hit.id))
   let vector: { id: number; score: number }[] = []
   if (engine.vectorReady && engine.vectors !== null) {
     const embedded = await embedTexts([queryText(query)])
     const row = embedded.data
-    vector = searchVectors(engine.vectors, engine.vectorDim, engine.chunks.map((chunk) => chunk.chunkId), row, VECTOR_K)
+    vector = searchVectors(
+      engine.vectors,
+      engine.vectorDim,
+      engine.chunks.map((chunk) => chunk.chunkId),
+      row,
+      limits.vectorK,
+    )
     vector = vector.filter((hit) => listedChunk(hit.id))
   }
   const vectorOnly = new Set(vector.map((hit) => hit.id).filter((id) => !lexicalIds.has(id)))
-  const fused = fuseRanks([lexical.map((hit) => hit.id), vector.map((hit) => hit.id)], FUSED_K)
+  const fused = fuseRanks([lexical.map((hit) => hit.id), vector.map((hit) => hit.id)], limits.fusedK)
   const hits: ExtractHit[] = []
   for (const item of fused) {
     const chunk = engine.byId.get(item.id)

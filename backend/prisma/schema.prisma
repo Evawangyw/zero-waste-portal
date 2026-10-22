@@ -26,6 +26,10 @@ model User {
   passwordHash String
   /// 是否管理员（看板可见性控制）
   isAdmin      Boolean  @default(false)
+  /// 能否打开资料详情和在线预览。管理员始终可以。
+  canPreview   Boolean  @default(true)
+  /// 能否下载资料。管理员始终可以。
+  canDownload  Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

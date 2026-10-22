@@ -7,6 +7,7 @@ import { authRouter } from './modules/auth/index.js'
 import { docsRouter, fileRouter, listingRouter, shelfRouter, uploadRouter } from './modules/docs/index.js'
 import { embedRouter } from './modules/embed/index.js'
 import { healthRouter } from './modules/health/index.js'
+import { settingsRouter } from './modules/settings/index.js'
 import { trackRouter } from './modules/track/index.js'
 import { jsonErrorHandler } from './middleware/json-error.handler.js'
 
@@ -57,6 +58,7 @@ export function createApp(): Express {
   //   GET  /api/admin/stats/summary 管理员看板摘要（静态口令或 isAdmin 用户 JWT）
   // 路径与前面所有路由不重叠，挂在最后即可；不改任何既有模块的行为。
   app.use(trackRouter)
+  app.use(settingsRouter)
 
   // 管理员单独上传一份资料到书架。只接受已登录的管理员。
   app.use(uploadRouter)

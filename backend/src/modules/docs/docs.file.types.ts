@@ -160,7 +160,7 @@ export interface PreviewTicketResponse {
 
 /** 文件层错误码 */
 export type DocFileErrorKind =
-  'bad_request' | 'unauthorized' | 'not_found' | 'upstream_unavailable' | 'internal'
+  'bad_request' | 'unauthorized' | 'forbidden' | 'not_found' | 'upstream_unavailable' | 'internal'
 
 /** 文件层统一错误体 */
 export interface DocFileErrorResponse {

@@ -57,6 +57,7 @@ async function handleDetail(req: Request, res: Response): Promise<void> {
     return
   }
   if (await refuseUnlisted(id, res)) return
+  if (await refuseAccess(res, 'preview')) return
   try {
     const detail = await resolveDocDetail(id)
     if (detail === null) {
@@ -91,6 +92,7 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
     return
   }
   if (await refuseUnlisted(id, res)) return
+  if (await refuseAccess(res, 'preview')) return
   const opened = await openPreview(id)
   await sendPreview(res, opened, req)
 }
@@ -102,6 +104,7 @@ async function handlePreviewTicket(req: Request, res: Response): Promise<void> {
     return
   }
   if (await refuseUnlisted(id, res)) return
+  if (await refuseAccess(res, 'preview')) return
   const opened = await openPreview(id)
   if (opened.kind !== 'file') {
     await sendPreview(res, opened)
@@ -268,6 +271,7 @@ async function handleDownload(req: AuthRequest, res: AuthResponse): Promise<void
     respondError(res, 401, 'unauthorized', '请先登录后再下载')
     return
   }
+  if (await refuseAccess(res, 'download')) return
   if (await refuseUnlisted(id, res)) return
 
   let resolved: Awaited<ReturnType<typeof resolveDocForDownload>>
@@ -458,13 +462,33 @@ async function refuseUnlisted(id: string, res: Response): Promise<boolean> {
 }
 
 async function callerIsAdmin(res: Response): Promise<boolean> {
+  const access = await callerAccess(res)
+  return access?.isAdmin === true
+}
+
+async function refuseAccess(res: Response, kind: 'preview' | 'download'): Promise<boolean> {
+  const access = await callerAccess(res)
+  if (access === null) {
+    respondError(res, 401, 'unauthorized', '请先登录')
+    return true
+  }
+  if (access.isAdmin) return false
+  if (kind === 'preview' && access.canPreview) return false
+  if (kind === 'download' && access.canDownload) return false
+  respondError(res, 403, 'forbidden', kind === 'preview' ? '这个账号没有预览权限' : '这个账号没有下载权限')
+  return true
+}
+
+async function callerAccess(
+  res: Response,
+): Promise<{ readonly isAdmin: boolean; readonly canPreview: boolean; readonly canDownload: boolean } | null> {
   const auth = getAuthContext(res as AuthResponse)
-  if (auth === null) return false
+  if (auth === null) return null
   const user = await getPrisma().user.findUnique({
     where: { id: auth.userId },
-    select: { isAdmin: true },
+    select: { isAdmin: true, canPreview: true, canDownload: true },
   })
-  return user?.isAdmin === true
+  return user
 }
 
 // ------------------------------------------------------------------ 工具

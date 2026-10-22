@@ -3,11 +3,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { CorpusChunk } from './ask.corpus.js'
 import { vectorCacheDir } from './ask.corpus.js'
+import { peekAskSettings } from '../settings/settings.store.js'
 
-const MODEL_ID = 'Xenova/bge-small-zh-v1.5'
+function currentVectorModel(): string {
+  return peekAskSettings().vectorModel
+}
 const QUERY_PREFIX = '为这个句子生成表示以用于检索相关文章：'
 const PASSAGE_CHARS = 480
 const BATCH = 16
+// q8 权重在 onnx/model_quantized.onnx。transformers 4.3.1 不读 HF_ENDPOINT。
+const MODEL_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_quantized.onnx'] as const
 
 interface VectorMeta {
   readonly model: string
@@ -47,7 +52,7 @@ export function loadVectorMatrix(
   const paths = vectorPaths()
   if (!existsSync(paths.meta) || !existsSync(paths.data)) return null
   const meta = readMeta(paths.meta)
-  if (meta === null || meta.model !== MODEL_ID || !sameIds(meta.chunkIds, chunkIds)) return null
+  if (meta === null || meta.model !== currentVectorModel() || !sameIds(meta.chunkIds, chunkIds)) return null
   const expected = meta.chunkIds.length * meta.dim * 4
   const raw = readFileSync(paths.data)
   if (raw.byteLength !== expected) return null
@@ -101,19 +106,51 @@ export function searchVectors(
   return hits.slice(0, topK)
 }
 
+/**
+ * 模型目录。容器里用 ASK_MODEL_DIR（compose 设为 /app/backend/models）。
+ * 本机从 backend/ 跑时用 ./models，从仓库根跑时用 ./backend/models。
+ * 目录下要有 Xenova/bge-small-zh-v1.5/{config,tokenizer,onnx}。
+ */
+function bundledModelDir(cwd: string = process.cwd()): string {
+  const fromEnv = process.env['ASK_MODEL_DIR']
+  if (fromEnv !== undefined && fromEnv.trim() !== '') return resolve(fromEnv.trim())
+  if (existsSync(resolve(cwd, 'prisma'))) return resolve(cwd, 'models')
+  return resolve(cwd, 'backend', 'models')
+}
+
+let loadedModel = ''
+
 async function getEmbedder(): Promise<EmbedCall> {
-  if (embedCall !== null) return embedCall
+  const model = currentVectorModel()
+  if (embedCall !== null && loadedModel === model) return embedCall
+  embedCall = null
   const imported: unknown = await import('@huggingface/transformers')
   if (!isRecord(imported) || typeof imported['pipeline'] !== 'function') {
     throw new Error('向量模型模块未就绪')
   }
+  useBundledModel(imported, model)
   const create = imported['pipeline'] as (
     task: 'feature-extraction',
     model: string,
-    options: { readonly dtype: 'q8' },
+    options: { readonly dtype: 'q8'; readonly local_files_only: true },
   ) => Promise<EmbedCall>
-  embedCall = await create('feature-extraction', MODEL_ID, { dtype: 'q8' })
+  embedCall = await create('feature-extraction', model, { dtype: 'q8', local_files_only: true })
+  loadedModel = model
   return embedCall
+}
+
+function useBundledModel(imported: Record<string, unknown>, model: string): void {
+  const env = imported['env']
+  if (!isRecord(env)) throw new Error('向量模型环境未就绪')
+  const root = bundledModelDir()
+  const modelDir = resolve(root, model)
+  for (const name of MODEL_FILES) {
+    const file = resolve(modelDir, name)
+    if (!existsSync(file)) throw new Error(`本地向量模型缺少 ${name}：${file}`)
+  }
+  env['localModelPath'] = root.endsWith('/') ? root : `${root}/`
+  env['allowRemoteModels'] = false
+  env['fetch'] = () => Promise.reject(new Error('向量模型只读本地文件，不会访问 huggingface.co'))
 }
 
 function readTensor(value: unknown, batch: number): { dim: number; data: Float32Array } {
@@ -128,13 +165,21 @@ function readTensor(value: unknown, batch: number): { dim: number; data: Float32
   return { dim, data }
 }
 
+export function readVectorIndexModel(): string | null {
+  const paths = vectorPaths()
+  if (!existsSync(paths.meta)) return null
+  return readMeta(paths.meta)?.model ?? null
+}
+
 function readMeta(file: string): VectorMeta | null {
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'))
-    if (!isRecord(parsed) || parsed['model'] !== MODEL_ID || typeof parsed['dim'] !== 'number') return null
+    if (!isRecord(parsed) || typeof parsed['model'] !== 'string' || typeof parsed['dim'] !== 'number') {
+      return null
+    }
     const ids = parsed['chunkIds']
     if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'number')) return null
-    return { model: MODEL_ID, dim: parsed['dim'], chunkIds: ids }
+    return { model: parsed['model'], dim: parsed['dim'], chunkIds: ids }
   } catch {
     return null
   }
@@ -149,7 +194,9 @@ function sameIds(left: readonly number[], right: readonly number[]): boolean {
 function resumePoint(ids: readonly number[]): { dim: number; done: number; data: Float32Array } | null {
   const paths = vectorPaths()
   const meta = existsSync(paths.meta) ? readMeta(paths.meta) : null
-  if (meta === null || !sameIds(meta.chunkIds, ids) || !existsSync(paths.data)) return null
+  if (meta === null || meta.model !== currentVectorModel() || !sameIds(meta.chunkIds, ids) || !existsSync(paths.data)) {
+    return null
+  }
   const raw = readFileSync(paths.data)
   const done = Math.floor(raw.byteLength / (meta.dim * 4))
   if (done <= 0 || done > ids.length) return null
@@ -169,7 +216,7 @@ function flushMatrix(
   matrix: Float32Array,
   done: number,
 ): void {
-  writeFileSync(metaPath, JSON.stringify({ model: MODEL_ID, dim, chunkIds: ids }))
+  writeFileSync(metaPath, JSON.stringify({ model: currentVectorModel(), dim, chunkIds: ids }))
   const bytes = Buffer.from(matrix.buffer, matrix.byteOffset, done * dim * 4)
   writeFileSync(dataPath, bytes)
 }
