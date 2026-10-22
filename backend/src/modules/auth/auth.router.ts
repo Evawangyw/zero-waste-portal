@@ -5,11 +5,13 @@
 //   POST /api/auth/register  五字段 + 密码 + consent 全校验 -> 201（不回传密码哈希）
 //   POST /api/auth/login     手机号 + 密码 -> 200 { token, expiresAt, user }
 //   GET  /api/auth/me        requireAuth 保护 -> 200 { user }（五字段，不含密码哈希）
+//   GET  /api/auth/me/profile  requireAuth；普通用户看到自己的提问和下载，管理员 403
 import { Router } from 'express'
 import { respondAuthError, sendValidationIssues } from './auth.respond.js'
 import type { AuthResponse } from './auth.respond.js'
 import { requireAuth } from './auth.middleware.js'
 import type { AuthRequest } from './auth.middleware.js'
+import { loadProfileHome } from './auth.profile.js'
 import { AuthError, findUserById, loginUser, registerUser } from './auth.service.js'
 import { parseLoginBody, parseRegisterBody } from './auth.validate.js'
 
@@ -69,6 +71,24 @@ async function handleMe(res: AuthResponse): Promise<void> {
       throw new AuthError({ code: 'USER_GONE', status: 401, message: '账号不存在，请重新登录' })
     }
     res.status(200).json({ success: true, user })
+  } catch (err) {
+    respondAuthError(res, err)
+  }
+}
+
+/** GET /api/auth/me/profile（只读当前登录用户自己的记录） */
+authRouter.get('/api/auth/me/profile', requireAuth, (_req, res) => {
+  void handleProfile(res as AuthResponse)
+})
+
+async function handleProfile(res: AuthResponse): Promise<void> {
+  try {
+    const userId = res.locals.auth?.userId
+    if (userId === undefined) {
+      throw new AuthError({ code: 'AUTH_REQUIRED', status: 401, message: '缺少登录态' })
+    }
+    const home = await loadProfileHome(userId)
+    res.status(200).json(home)
   } catch (err) {
     respondAuthError(res, err)
   }

@@ -13,6 +13,7 @@ export type AuthErrorCode =
   | 'AUTH_REQUIRED'
   | 'INVALID_TOKEN'
   | 'USER_GONE'
+  | 'NOT_FOR_ADMIN'
   | 'INTERNAL_ERROR'
 
 export interface FieldIssue {
@@ -103,6 +104,33 @@ export interface LoginResponse {
 export interface MeResponse {
   readonly success: true
   readonly user: PublicUser
+}
+
+/** 个人主页里的一次提问。answer 为空表示当时没有留下回答 */
+export interface ProfileQuestion {
+  readonly id: string
+  readonly question: string
+  readonly answer: string
+  readonly createdAt: string
+}
+
+/** 个人主页里的一次下载 */
+export interface ProfileDownload {
+  readonly id: string
+  readonly docId: string
+  readonly docTitle: string
+  readonly fileName: string
+  readonly createdAt: string
+}
+
+/** GET /api/auth/me/profile */
+export interface ProfileHomeResponse {
+  readonly success: true
+  readonly user: PublicUser
+  readonly questions: readonly ProfileQuestion[]
+  readonly questionTotal: number
+  readonly downloads: readonly ProfileDownload[]
+  readonly downloadTotal: number
 }
 
 // ---------------------------------------------------------------- 书架（T03）

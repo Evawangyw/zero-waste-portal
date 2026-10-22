@@ -6,6 +6,7 @@ import type {
   LoginBody,
   LoginResponse,
   MeResponse,
+  ProfileHomeResponse,
   PublicUser,
   RegisterBody,
   RegisterResponse,
@@ -24,6 +25,11 @@ export function login(body: LoginBody): Promise<LoginResponse> {
 /** GET /api/auth/me —— 带 JWT 取当前用户；未登录时后端回 401 */
 export function me(token: string): Promise<MeResponse> {
   return request<MeResponse>('/auth/me', { token })
+}
+
+/** GET /api/auth/me/profile —— 普通用户的个人主页 */
+export function fetchMyProfile(token: string): Promise<ProfileHomeResponse> {
+  return request<ProfileHomeResponse>('/auth/me/profile', { token })
 }
 
 /** 从 ApiError 里取字段级明细（表单逐字段标红用） */

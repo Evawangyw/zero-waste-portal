@@ -51,14 +51,22 @@ void authToken
         <router-link to="/" :class="{ active: isActive('/') }">关于零废弃知识库</router-link>
         <router-link to="/shelf" :class="{ active: isActive('/shelf') }">资料书架</router-link>
         <router-link to="/ask" :class="{ active: isActive('/ask') }">AI助手</router-link>
-        <router-link v-if="isAdmin" to="/admin/stats" :class="{ active: isActive('/admin/stats') }">
+        <router-link
+          v-if="isLoggedIn && currentUser !== null && !isAdmin"
+          to="/me"
+          :class="{ active: isActive('/me') }"
+        >
+          个人主页
+        </router-link>
+        <router-link v-if="isAdmin" to="/admin/stats" :class="{ active: isActive('/admin') }">
           管理统计
         </router-link>
       </nav>
 
       <div class="nav-right">
         <template v-if="isLoggedIn">
-          <span class="user-name">{{ nickname }}，你好</span>
+          <router-link v-if="!isAdmin" to="/me" class="user-name">{{ nickname }}，你好</router-link>
+          <span v-else class="user-name">{{ nickname }}，你好</span>
           <el-button size="small" @click="onLogout">退出登录</el-button>
         </template>
         <el-button v-else size="small" type="primary" @click="goAuth">登录 / 注册</el-button>
@@ -167,6 +175,7 @@ void authToken
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-decoration: none;
 }
 
 @media (max-width: 860px) {
@@ -184,11 +193,17 @@ void authToken
 
   .nav-links {
     grid-column: 1 / -1;
+    grid-row: 2;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
     width: 100%;
     margin-left: 0;
     gap: 6px;
+  }
+
+  .nav-right {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .nav-links a {
@@ -197,6 +212,12 @@ void authToken
     line-height: 1.3;
     text-align: center;
     white-space: normal;
+  }
+
+  @media (max-width: 520px) {
+    .nav-links {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .brand-mark {

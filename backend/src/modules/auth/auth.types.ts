@@ -9,6 +9,9 @@
 //                            | 401 { code:'INVALID_CREDENTIALS' }
 //   GET  /api/auth/me       -> 200 { success:true, user:PublicUser }   （requireAuth 守卫）
 //                            | 401 无 token / token 失效
+//   GET  /api/auth/me/profile -> 200 普通用户的个人主页（本人提问与下载）
+//                            | 401 无 token / token 失效
+//                            | 403 管理员不使用这个页面
 //
 // 边界：本模块只管自建用户体系，与 WeKnora 账号完全隔离。
 // 「需登录动作」（下载 / 提问）的守卫见 requireAuth，本卡只导出不接线（T04/T06 用）。
@@ -22,6 +25,7 @@ export type AuthErrorCode =
   | 'AUTH_REQUIRED'
   | 'INVALID_TOKEN'
   | 'USER_GONE'
+  | 'NOT_FOR_ADMIN'
   | 'INTERNAL_ERROR'
 
 /** 单字段校验失败明细（验收①要求：报错必须指明缺哪个字段） */
@@ -93,6 +97,33 @@ export interface LoginResponse {
 export interface MeResponse {
   readonly success: true
   readonly user: PublicUser
+}
+
+/** 个人主页里的一次提问。answer 为空表示当时没有留下回答 */
+export interface ProfileQuestion {
+  readonly id: string
+  readonly question: string
+  readonly answer: string
+  readonly createdAt: string
+}
+
+/** 个人主页里的一次下载 */
+export interface ProfileDownload {
+  readonly id: string
+  readonly docId: string
+  readonly docTitle: string
+  readonly fileName: string
+  readonly createdAt: string
+}
+
+/** GET /api/auth/me/profile。只含当前用户自己的记录，不含密码 */
+export interface ProfileHomeResponse {
+  readonly success: true
+  readonly user: PublicUser
+  readonly questions: readonly ProfileQuestion[]
+  readonly questionTotal: number
+  readonly downloads: readonly ProfileDownload[]
+  readonly downloadTotal: number
 }
 
 /** requireAuth 成功后放进 res.locals.auth 的登录态（T04/T06 从这里拿 userId） */

@@ -8,11 +8,17 @@ import type {
   FieldIssue,
   LoginResponse,
   MeResponse,
+  ProfileHomeResponse,
   RegisterResponse,
 } from './auth.types.js'
 
 /** auth 路由可能返回的响应体并集（成功体 + 错误体） */
-export type AuthResBody = RegisterResponse | LoginResponse | MeResponse | AuthErrorBody
+export type AuthResBody =
+  | RegisterResponse
+  | LoginResponse
+  | MeResponse
+  | ProfileHomeResponse
+  | AuthErrorBody
 
 /** 带 AuthLocals 的响应（登录态放 res.locals.auth） */
 export type AuthResponse = Response<AuthResBody, AuthLocals>

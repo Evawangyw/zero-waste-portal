@@ -3,13 +3,16 @@
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SiteNav from './components/SiteNav.vue'
-import { isLoggedIn, restoreAuth } from './composables/useAuth'
+import { currentUser, isLoggedIn, restoreAuth } from './composables/useAuth'
 import { APP_NAME } from './constants'
 
 const route = useRoute()
 const router = useRouter()
 const bare = computed(() => route.meta['bare'] === true)
 const askPage = computed(() => route.name === 'ask')
+const showProfileLink = computed(
+  () => isLoggedIn.value && currentUser.value !== null && currentUser.value.isAdmin !== true,
+)
 
 onMounted(() => {
   // 登录态恢复：有 token 才拉 /me，失败不打断页面
@@ -18,7 +21,7 @@ onMounted(() => {
 
 // 人已经在关于页或 AI 助手页时退出，路由不会重新进入守卫，这里补一次，回到开场介绍。
 watch(isLoggedIn, (loggedIn) => {
-  if (!loggedIn && (route.name === 'about' || route.name === 'ask')) {
+  if (!loggedIn && (route.name === 'about' || route.name === 'ask' || route.name === 'profile')) {
     void router.replace({ name: 'intro' })
   }
 })
@@ -42,6 +45,7 @@ watch(isLoggedIn, (loggedIn) => {
           <router-link to="/">关于零废弃知识库</router-link>
           <router-link to="/shelf">资料书架</router-link>
           <router-link to="/ask">AI助手</router-link>
+          <router-link v-if="showProfileLink" to="/me">个人主页</router-link>
           <a href="https://www.lcx-foundation.org.cn/" target="_blank" rel="noopener noreferrer">
             基金会官网
           </a>

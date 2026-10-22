@@ -25,6 +25,7 @@
     "ingest:sample-pdf": "tsx src/modules/ingest/ingest.sample-pdf.ts",
     "test:track": "tsx src/modules/track/track.selftest.ts",
     "test:ask-history": "tsx src/modules/ask/ask.history.selftest.ts",
+    "test:profile": "tsx src/modules/auth/auth.profile.selftest.ts",
     "test:ask-extract": "tsx src/modules/ask/ask.extract.selftest.ts",
     "test:ask-generate": "tsx src/modules/ask/ask.generate.selftest.ts",
     "test:ask-retrieve": "tsx src/modules/ask/ask.retrieve.selftest.ts",

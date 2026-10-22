@@ -41,6 +41,7 @@ export function createApp(): Express {
 
   // T02：自建用户体系（与 WeKnora 账号隔离）
   //   POST /api/auth/register | POST /api/auth/login | GET /api/auth/me
+  //   GET  /api/auth/me/profile  普通用户的个人主页（本人提问与下载）
   // 登录守卫 requireAuth 由 auth 模块导出，本卡只用于 /me；下载/提问守卫待 T04/T06 自行挂载。
   app.use(authRouter)
 

@@ -12,6 +12,7 @@ import DocDetailView from '../views/DocDetailView.vue'
 import AuthView from '../views/AuthView.vue'
 import IntroView from '../views/IntroView.vue'
 import AdminStatsView from '../views/AdminStatsView.vue'
+import ProfileView from '../views/ProfileView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 
 const routes: readonly RouteRecordRaw[] = [
@@ -54,6 +55,12 @@ const routes: readonly RouteRecordRaw[] = [
     name: 'intro',
     component: IntroView,
     meta: { title: '知识库介绍', bare: true },
+  },
+  {
+    path: '/me',
+    name: 'profile',
+    component: ProfileView,
+    meta: { title: '个人主页', requiresAuth: true },
   },
   {
     // T08lite 管理统计最简页。meta.requiresAdmin 只是**声明式标记**：
