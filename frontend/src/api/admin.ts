@@ -48,7 +48,12 @@ export function fetchChunkPage(
 /** GET /api/admin/docs —— 管理员翻资料，决定上架还是下架 */
 export function fetchAdminShelf(
   token: string,
-  query: { readonly q?: string; readonly listed?: '1' | '0' | 'all'; readonly page?: number },
+  query: {
+    readonly q?: string
+    readonly listed?: '1' | '0' | 'all'
+    readonly page?: number
+    readonly pageSize?: number
+  },
 ): Promise<AdminShelfResponse> {
   return request<AdminShelfResponse>('/admin/docs', { token, query })
 }

@@ -11,6 +11,10 @@ import ShelfView from '../views/ShelfView.vue'
 import DocDetailView from '../views/DocDetailView.vue'
 import AuthView from '../views/AuthView.vue'
 import IntroView from '../views/IntroView.vue'
+import AdminShell from '../views/admin/AdminShell.vue'
+import AdminDocsView from '../views/admin/AdminDocsView.vue'
+import AdminUsersView from '../views/admin/AdminUsersView.vue'
+import AdminSettingsView from '../views/admin/AdminSettingsView.vue'
 import AdminStatsView from '../views/AdminStatsView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
@@ -63,13 +67,37 @@ const routes: readonly RouteRecordRaw[] = [
     meta: { title: '个人主页', requiresAuth: true },
   },
   {
-    // T08lite 管理统计最简页。meta.requiresAdmin 只是**声明式标记**：
-    // 本页不在路由层放守卫 —— 卡片要求非管理员访问时「看到权限提示页」而不是被重定向，
-    // 所以权限判定放在 AdminStatsView 内部（校验中/未登录/非管理员 三态各自提示）。
-    path: '/admin/stats',
-    name: 'admin-stats',
-    component: AdminStatsView,
-    meta: { title: '管理统计', requiresAdmin: true },
+    // 管理区。不在路由层重定向未登录的人，外壳里给出登录或权限提示。
+    path: '/admin',
+    component: AdminShell,
+    meta: { title: '管理' },
+    children: [
+      { path: '', redirect: { name: 'admin-stats' } },
+      {
+        path: 'docs',
+        name: 'admin-docs',
+        component: AdminDocsView,
+        meta: { title: '资料管理' },
+      },
+      {
+        path: 'users',
+        name: 'admin-users',
+        component: AdminUsersView,
+        meta: { title: '注册信息' },
+      },
+      {
+        path: 'stats',
+        name: 'admin-stats',
+        component: AdminStatsView,
+        meta: { title: '数据看板' },
+      },
+      {
+        path: 'settings',
+        name: 'admin-settings',
+        component: AdminSettingsView,
+        meta: { title: '系统设置' },
+      },
+    ],
   },
   {
     path: '/:pathMatch(.*)*',

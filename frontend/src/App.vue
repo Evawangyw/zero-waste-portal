@@ -10,6 +10,7 @@ const route = useRoute()
 const router = useRouter()
 const bare = computed(() => route.meta['bare'] === true)
 const askPage = computed(() => route.name === 'ask')
+const adminPage = computed(() => route.path.startsWith('/admin'))
 const showProfileLink = computed(
   () => isLoggedIn.value && currentUser.value !== null && currentUser.value.isAdmin !== true,
 )
@@ -31,7 +32,7 @@ watch(isLoggedIn, (loggedIn) => {
 <template>
   <el-container class="app-shell" direction="vertical" :class="{ 'ask-shell': askPage }">
     <SiteNav v-if="!bare" />
-    <el-main class="app-main" :class="{ 'app-main-bare': bare, 'app-main-ask': askPage }">
+    <el-main class="app-main" :class="{ 'app-main-bare': bare, 'app-main-ask': askPage, 'app-main-admin': adminPage }">
       <router-view />
     </el-main>
     <el-footer v-if="!bare && !askPage" class="app-footer" height="auto">
@@ -98,6 +99,10 @@ watch(isLoggedIn, (loggedIn) => {
   margin: 0;
   padding: 0;
   overflow: hidden;
+}
+
+.app-main-admin {
+  max-width: 1280px;
 }
 
 .app-footer {

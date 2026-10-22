@@ -1,48 +1,24 @@
 <script setup lang="ts">
-// 管理统计：管理员在网页上直接看使用情况，并点进书架或资料核对。
+// 数据看板：使用情况图表。登录和权限提示在管理外壳里。
 // 数据来自 GET /api/admin/stats/summary。提问结果用回写后的判定，高频提问用 topAskTerms。
-// 权限判定留在视图内：校验中 → 未登录 → 非管理员，三态各自给对应提示。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import type { EChartsCoreOption } from 'echarts/core'
-import { fetchAdminShelf, fetchStatsSummary, setAdminDocListed, uploadAdminDocument } from '../api/admin'
+import { fetchStatsSummary } from '../api/admin'
 import { ApiError } from '../api/http'
-import type { AdminShelfItem, StatsSummaryResponse } from '../api/types'
+import type { StatsSummaryResponse } from '../api/types'
 import StatsChart from '../components/StatsChart.vue'
 import { ADMIN_STATS_REFRESH_MS, TRACK_EVENT_LABELS } from '../constants'
-import { authToken, currentUser, isLoggedIn, restoreAuth } from '../composables/useAuth'
+import { authToken, currentUser } from '../composables/useAuth'
 
 const router = useRouter()
-
-// ---------------------------------------------------------------- 权限三态
-
-/** 登录态是否已校验完（false = 还在拉 /me，此刻不能下"非管理员"的结论） */
-const authChecked = ref(false)
-/** 登录态校验失败但 token 还在（后端 /me 不可用）：这时既不能说他是管理员，也不能说不是 */
-const authUnverified = ref(false)
-
 const isAdmin = computed(() => currentUser.value?.isAdmin === true)
-
-/** 是否该展示五块数据区（只有管理员且登录态已确认） */
-const showPanel = computed(() => authChecked.value && isAdmin.value && !authUnverified.value)
 
 // ---------------------------------------------------------------- 数据
 
 const summary = ref<StatsSummaryResponse | null>(null)
 const loading = ref(false)
 const loadError = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-const uploadOpen = ref(false)
-const uploadFile = ref<File | null>(null)
-const uploadBusy = ref(false)
-const uploadError = ref('')
-const uploadTitle = ref('')
-const uploadYear = ref('')
-const uploadOrg = ref('')
-const uploadType = ref('')
-const uploadTopic = ref('')
-const uploadLibrary = ref('')
 
 /** 事件分布表的行（key/label 来自 constants，值来自 summary.events，缺项补 0） */
 const eventRows = computed(() =>
@@ -132,8 +108,6 @@ const downloadRows = computed(() =>
     count: row.count,
   })),
 )
-const registrationRows = computed(() => [...(summary.value?.profiles.users ?? [])])
-
 const occupationRows = computed(() => summary.value?.profiles.byOccupation ?? [])
 const topicRows = computed(() => summary.value?.profiles.byTopic ?? [])
 const orgRows = computed(() => summary.value?.profiles.byOrg ?? [])
@@ -164,73 +138,8 @@ async function loadSummary(): Promise<void> {
   }
 }
 
-/** 手动刷新按钮（自动刷新之外的第二条路，卡片要求二选一，这里两个都给） */
 function onManualRefresh(): void {
   void loadSummary()
-  void loadListing()
-}
-
-function openUploadPicker(): void {
-  uploadError.value = ''
-  fileInput.value?.click()
-}
-
-function onUploadPicked(event: Event): void {
-  const input = event.target
-  if (!(input instanceof HTMLInputElement)) return
-  const file = input.files?.[0] ?? null
-  input.value = ''
-  if (file === null) return
-  uploadFile.value = file
-  uploadTitle.value = file.name.replace(/\.[a-z0-9]{1,8}$/iu, '')
-  uploadYear.value = ''
-  uploadOrg.value = ''
-  uploadType.value = ''
-  uploadTopic.value = ''
-  uploadLibrary.value = ''
-  uploadError.value = ''
-  uploadOpen.value = true
-}
-
-function closeUpload(): void {
-  if (uploadBusy.value) return
-  uploadOpen.value = false
-  uploadFile.value = null
-}
-
-async function submitUpload(): Promise<void> {
-  const token = authToken()
-  const file = uploadFile.value
-  if (token === null || file === null || uploadBusy.value) return
-  uploadBusy.value = true
-  uploadError.value = ''
-  try {
-    const result = await uploadAdminDocument(token, file, {
-      title: uploadTitle.value.trim(),
-      year: uploadYear.value.trim(),
-      org: uploadOrg.value.trim(),
-      docType: uploadType.value.trim(),
-      topic: uploadTopic.value.trim(),
-      library: uploadLibrary.value,
-    })
-    uploadOpen.value = false
-    uploadFile.value = null
-    ElMessage.success(`《${result.doc.title}》已上架。${result.somark.message}`)
-    await loadSummary()
-    await loadListing()
-  } catch (err) {
-    uploadError.value = err instanceof ApiError ? err.message : '上传失败'
-  } finally {
-    uploadBusy.value = false
-  }
-}
-
-function goAuth(): void {
-  void router.push({ path: '/auth', query: { redirect: '/admin/stats' } })
-}
-
-function goHome(): void {
-  void router.push('/')
 }
 
 function openShelf(term: string): void {
@@ -274,15 +183,6 @@ function visitorStamp(row: unknown, key: 'firstSeenAt' | 'lastSeenAt'): string {
 
 function docLink(docId: string): string {
   return `/doc/${docId}`
-}
-
-function profileText(value: string, empty: string): string {
-  const text = value.trim()
-  return text === '' ? empty : text
-}
-
-function topicText(topics: readonly string[]): string {
-  return topics.length === 0 ? '未选择' : topics.join('、')
 }
 
 function chartHeight(count: number): number {
@@ -459,107 +359,17 @@ function barOption(
   }
 }
 
-// ---------------------------------------------------------------- 上下架
-
-const LISTING_PAGE_SIZE = 10
-
-const listingItems = ref<AdminShelfItem[]>([])
-const listingTotal = ref(0)
-const listingPage = ref(1)
-const listingQuery = ref('')
-const listingFilter = ref<'1' | '0' | 'all'>('1')
-const listingLoading = ref(false)
-const listingError = ref('')
-const listingBusyId = ref('')
-let listingTimer: ReturnType<typeof setTimeout> | undefined
-
-function onListingInput(): void {
-  if (listingTimer !== undefined) clearTimeout(listingTimer)
-  listingTimer = setTimeout(() => {
-    listingTimer = undefined
-    listingPage.value = 1
-    void loadListing()
-  }, 300)
-}
-
-function setListingFilter(next: '1' | '0' | 'all'): void {
-  listingFilter.value = next
-  listingPage.value = 1
-  void loadListing()
-}
-
-function onListingPage(next: number): void {
-  listingPage.value = next
-  void loadListing()
-}
-
-async function loadListing(): Promise<void> {
-  const token = authToken()
-  if (token === null || !isAdmin.value) return
-  listingLoading.value = true
-  listingError.value = ''
-  try {
-    const page = await fetchAdminShelf(token, {
-      q: listingQuery.value.trim(),
-      listed: listingFilter.value,
-      page: listingPage.value,
-    })
-    listingItems.value = [...page.items]
-    listingTotal.value = page.total
-    listingPage.value = page.page
-  } catch (err) {
-    listingError.value = err instanceof ApiError ? err.message : '资料列表加载失败'
-  } finally {
-    listingLoading.value = false
-  }
-}
-
-async function toggleListed(row: AdminShelfItem): Promise<void> {
-  const token = authToken()
-  if (token === null || listingBusyId.value !== '') return
-  listingBusyId.value = row.id
-  const nextListed = !row.listed
-  try {
-    await setAdminDocListed(token, row.id, nextListed)
-    ElMessage.success(nextListed ? `《${row.title}》已上架` : `《${row.title}》已下架`)
-    if (summary.value !== null) {
-      const delta = nextListed ? 1 : -1
-      summary.value = {
-        ...summary.value,
-        library: { ...summary.value.library, documents: summary.value.library.documents + delta },
-      }
-    }
-    await loadListing()
-  } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '操作失败')
-  } finally {
-    listingBusyId.value = ''
-  }
-}
-
-function listingMeta(row: AdminShelfItem): string {
-  const parts = [row.year, row.org, row.docType].filter((part) => part.trim() !== '')
-  return parts.length === 0 ? '未标注' : parts.join(' · ')
-}
-
 // ---------------------------------------------------------------- 启动 / 卸载
 
 /** 自动刷新定时器；组件卸载时必须清掉，否则离开页面还在打接口 */
 let timer: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
-  // 子组件的 onMounted 早于 App.vue 的 restoreAuth，这里显式等一次：
-  // 拿到确定的 isAdmin 才决定「显示数据」还是「显示提示页」。
-  await restoreAuth()
-  authChecked.value = true
-  authUnverified.value = isLoggedIn.value && currentUser.value === null
-  if (isAdmin.value) {
-    await loadSummary()
-    await loadListing()
-    timer = setInterval(() => {
-      void loadSummary()
-    }, ADMIN_STATS_REFRESH_MS)
-  }
+  if (!isAdmin.value) return
+  await loadSummary()
+  timer = setInterval(() => {
+    void loadSummary()
+  }, ADMIN_STATS_REFRESH_MS)
 })
 
 onUnmounted(() => {
@@ -567,177 +377,27 @@ onUnmounted(() => {
     clearInterval(timer)
     timer = null
   }
-  if (listingTimer !== undefined) clearTimeout(listingTimer)
 })
 </script>
 
 <template>
   <div class="admin-stats">
-    <!-- 未登录 / 非管理员 / 校验失败：都是提示页，绝不白屏（卡片验收②） -->
-    <el-card v-if="!showPanel" shadow="never" class="deny-card">
-      <el-result
-        v-if="!authChecked"
-        icon="info"
-        title="正在校验登录态…"
-        sub-title="稍等一下，马上就好"
-      />
-      <el-result
-        v-else-if="!isLoggedIn"
-        icon="warning"
-        title="需要登录后访问"
-        sub-title="管理统计只对登录用户开放，登录后再回来即可。"
-      >
-        <template #extra>
-          <el-space>
-            <el-button type="primary" @click="goAuth">去登录</el-button>
-            <el-button @click="goHome">回首页</el-button>
-          </el-space>
-        </template>
-      </el-result>
-      <el-result
-        v-else-if="authUnverified"
-        icon="error"
-        title="无法校验管理员身份"
-        sub-title="本机后端 /api/auth/me 暂时不可用，刷新页面重试。"
-      >
-        <template #extra>
-          <el-button @click="goHome">回首页</el-button>
-        </template>
-      </el-result>
-      <el-result
-        v-else
-        icon="error"
-        title="需要管理员权限"
-        sub-title="当前账号不是管理员，看不到统计数据。如需开通，请让运维用 admin:promote 把该账号提为管理员。"
-      >
-        <template #extra>
-          <el-space>
-            <el-tag type="info" effect="plain">当前账号：{{ currentUser?.phone ?? '—' }}</el-tag>
-            <el-button @click="goHome">回首页</el-button>
-          </el-space>
-        </template>
-      </el-result>
+    <el-card shadow="never" class="head-card">
+      <div class="head-row">
+        <div>
+          <h2 class="head-title">数据看板</h2>
+          <p class="head-sub">
+            更新于 {{ formatTime(summary?.generatedAt ?? '') }}。点检索词去书架核对，点文件名打开资料。每
+            5 分钟自动刷新。
+          </p>
+        </div>
+        <div class="head-actions">
+          <el-button :loading="loading" @click="onManualRefresh">刷新</el-button>
+        </div>
+      </div>
     </el-card>
 
-    <template v-else>
-      <el-card shadow="never" class="head-card">
-        <div class="head-row">
-          <div>
-            <h2 class="head-title">管理统计</h2>
-            <p class="head-sub">
-              更新于 {{ formatTime(summary?.generatedAt ?? '') }}。点检索词去书架核对，点文件名打开资料。每
-              5 分钟自动刷新。
-            </p>
-          </div>
-          <div class="head-actions">
-            <el-button type="primary" @click="openUploadPicker">上传资料</el-button>
-            <el-button :loading="loading" @click="onManualRefresh">刷新</el-button>
-          </div>
-        </div>
-      </el-card>
-
-      <input
-        ref="fileInput"
-        class="upload-input"
-        type="file"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf"
-        @change="onUploadPicked"
-      />
-
-      <el-dialog v-model="uploadOpen" title="上传资料" width="min(480px, calc(100vw - 24px))" :close-on-click-modal="!uploadBusy" :show-close="!uploadBusy" @close="closeUpload">
-        <p class="upload-file">{{ uploadFile?.name }}</p>
-        <p class="metric-note">上传后用 SoMark 转成 Markdown，写入书架和问答。页数多时会多等一会儿。</p>
-        <el-form label-position="top">
-          <el-form-item label="标题">
-            <el-input v-model="uploadTitle" maxlength="200" />
-          </el-form-item>
-          <el-form-item label="年份">
-            <el-input v-model="uploadYear" maxlength="4" placeholder="例如 2024，可空" />
-          </el-form-item>
-          <el-form-item label="发布机构">
-            <el-input v-model="uploadOrg" maxlength="80" />
-          </el-form-item>
-          <el-form-item label="知识类型">
-            <el-input v-model="uploadType" maxlength="40" placeholder="例如 研究报告" />
-          </el-form-item>
-          <el-form-item label="知识领域">
-            <el-select v-model="uploadLibrary" clearable placeholder="零废弃或化学品" style="width: 100%">
-              <el-option label="零废弃" value="零废弃" />
-              <el-option label="化学品" value="化学品" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="细分">
-            <el-input v-model="uploadTopic" maxlength="40" placeholder="例如 塑料、国际公约" />
-          </el-form-item>
-        </el-form>
-        <el-alert v-if="uploadError !== ''" type="error" :closable="false" :title="uploadError" />
-        <template #footer>
-          <el-button :disabled="uploadBusy" @click="closeUpload">取消</el-button>
-          <el-button type="primary" :loading="uploadBusy" @click="submitUpload">
-            {{ uploadBusy ? '正在转换并入库' : '开始上传' }}
-          </el-button>
-        </template>
-      </el-dialog>
-
-      <el-card shadow="never" class="block">
-        <template #header><span class="block-title">资料上下架</span></template>
-        <p class="metric-note visit-note">
-          下架后，公众书架不再显示，也不能打开或下载。首页提问不会再引用它。文件还在，可以再上架。
-        </p>
-        <div class="listing-tools">
-          <el-input
-            v-model="listingQuery"
-            clearable
-            placeholder="搜标题、文件名或机构"
-            class="listing-search"
-            @input="onListingInput"
-          />
-          <el-button :type="listingFilter === '1' ? 'primary' : 'default'" @click="setListingFilter('1')">
-            已上架
-          </el-button>
-          <el-button :type="listingFilter === '0' ? 'primary' : 'default'" @click="setListingFilter('0')">
-            已下架
-          </el-button>
-          <el-button :type="listingFilter === 'all' ? 'primary' : 'default'" @click="setListingFilter('all')">
-            全部
-          </el-button>
-        </div>
-        <el-alert v-if="listingError !== ''" type="error" :closable="false" :title="listingError" />
-        <el-table v-loading="listingLoading" :data="listingItems" size="small" empty-text="没有符合的资料">
-          <el-table-column label="资料" min-width="240">
-            <template #default="{ row }">
-              <div class="listing-title">{{ row.title }}</div>
-              <div class="metric-note">{{ listingMeta(row) }}</div>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="90">
-            <template #default="{ row }">{{ row.listed ? '已上架' : '已下架' }}</template>
-          </el-table-column>
-          <el-table-column label="" width="100">
-            <template #default="{ row }">
-              <el-button
-                size="small"
-                :type="row.listed ? 'warning' : 'primary'"
-                :loading="listingBusyId === row.id"
-                @click="toggleListed(row)"
-              >
-                {{ row.listed ? '下架' : '上架' }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div v-if="listingTotal > LISTING_PAGE_SIZE" class="listing-pager">
-          <el-pagination
-            layout="prev, pager, next, total"
-            :current-page="listingPage"
-            :page-size="LISTING_PAGE_SIZE"
-            :total="listingTotal"
-            @current-change="onListingPage"
-          />
-        </div>
-      </el-card>
-
-      <el-alert
+    <el-alert
         v-if="loadError !== ''"
         class="load-error"
         type="error"
@@ -814,24 +474,6 @@ onUnmounted(() => {
                 <StatsChart :option="orgChart" :height="chartHeight(orgRows.length)" />
               </el-col>
             </el-row>
-            <h3 class="sub-title user-table-title">注册用户</h3>
-            <p class="metric-note visit-note">展开一行查看岗位、领域和机构。领域是注册时选的关注议题。手机号只在这个管理页显示。</p>
-            <el-table :data="registrationRows" row-key="id" size="small" empty-text="还没有注册用户">
-              <el-table-column type="expand">
-                <template #default="{ row }">
-                  <div class="reg-expand">
-                    <div><span>岗位</span><b>{{ profileText(row.occupation, '未填写') }}</b></div>
-                    <div><span>领域</span><b>{{ topicText(row.topics) }}</b></div>
-                    <div><span>机构</span><b>{{ profileText(row.org, '未填写') }}</b></div>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column prop="name" label="姓名" min-width="120" />
-              <el-table-column prop="phone" label="手机号" min-width="140" />
-              <el-table-column label="注册时间" min-width="170">
-                <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
-              </el-table-column>
-            </el-table>
           </template>
         </el-card>
 
@@ -965,7 +607,6 @@ onUnmounted(() => {
         </el-card>
 
       </template>
-    </template>
   </div>
 </template>
 
